@@ -26,6 +26,7 @@ N_CPU1b=2
 
 default_update_m = 0.0005
 default_cpu1_input_m = 0.5
+default_a = 0.1
 
 # By Tom Stone (Stone et al Curr Biology 2017)
 def gen_tb_tb_weights(weight=1.):
@@ -111,6 +112,8 @@ class StoneNetwork :
         layers['TN2'] = nw.InputLayer(N=N_TN2)
         # ring layers
         layers['TB1'] = nw.HiddenLayer(N=N_TB1, output_channel='green', inhibition_channel='green', excitation_channel='blue')
+        # Add a rectifying layer that is not in the Stone model
+        layers['Rectifier'] = nw.HiddenLayer(N=N_CPU4, output_channel='brown', inhibition_channel='green', excitation_channel='brown')
         layers['CPU4'] = nw.HiddenLayer(N=N_CPU4, output_channel='orange', inhibition_channel='green', excitation_channel='brown')
         layers['Pontine'] = nw.HiddenLayer(N=N_Pontine,output_channel='green',inhibition_channel='white',excitation_channel='orange')
         layers['CPU1a'] = nw.HiddenLayer(N=N_CPU1a, output_channel='black', inhibition_channel='green', excitation_channel='orange')
@@ -129,12 +132,12 @@ class StoneNetwork :
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['TB1->TB1'].set_W(W)
         
-        weights['TB1->CPU4']=nw.connect_layers('TB1', 'CPU4', layers, channel='green')
+        weights['TB1->Rectifier']=nw.connect_layers('TB1', 'Rectifier', layers, channel='green')
         W = np.tile(np.diag([1.0]*N_TB1),(2,1)) 
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['TB1->CPU4'].set_W(W)
+        weights['TB1->Rectifier'].set_W(W)
         # The memory is updated with a lower weight
-        weights['TB1->CPU4'].scale_W(self.mem_update_h)
+       # weights['TB1->Rectifier'].scale_W(self.mem_update_h)
         
         weights['TB1->CPU1a']=nw.connect_layers('TB1', 'CPU1a', layers, channel='green')
         W = np.tile(np.diag([1.0]*N_TB1),(2,1))
@@ -148,12 +151,19 @@ class StoneNetwork :
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['TB1->CPU1b'].set_W(W*self.tb1_cpu1_m)
         
-        weights['TN2->CPU4']=nw.connect_layers('TN2', 'CPU4', layers, channel='brown')
-        W = np.concatenate((np.tile(np.array([1,0]),(N_CPU4//2,1)),np.tile(np.array([0,1]),(N_CPU4//2,1)))) 
+        weights['TN2->Rectifier']=nw.connect_layers('TN2', 'Rectifier', layers, channel='brown')
+        W = np.concatenate((np.tile(np.array([1.,0.]),(N_CPU4//2,1)),np.tile(np.array([0.,1.]),(N_CPU4//2,1)))) 
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['TN2->CPU4'].set_W(W)
+        weights['TN2->Rectifier'].set_W(W)
         # The memory is updated with a lower weight
-        weights['TN2->CPU4'].scale_W(self.mem_update_h)
+        #weights['TN2->Rectifier'].scale_W(self.mem_update_h)
+
+        # Diagonal weights connecting the rectifier to the CPU4 layer 
+        weights['Rectifier->CPU4']=nw.connect_layers('Rectifier', 'CPU4', layers, channel='brown')
+        W = np.diag([1.0]*N_CPU4)
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['Rectifier->CPU4'].set_W(W)
+        weights['Rectifier->CPU4'].scale_W(self.mem_update_h)
         
         weights['CPU4->CPU1a']=nw.connect_layers('CPU4', 'CPU1a', layers, channel='orange')
         W =   np.array([[0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], #2
@@ -172,14 +182,14 @@ class StoneNetwork :
                         [0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0., 0.], #15
                         ])
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['CPU4->CPU1a'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5
+        weights['CPU4->CPU1a'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5 as in cx_rate.py
         
         weights['CPU4->CPU1b']=nw.connect_layers('CPU4', 'CPU1b', layers, channel='orange')
         W = np.zeros((2,N_CPU4))
         W[0,0]=1.0
         W[-1,-1]=1.0
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['CPU4->CPU1b'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5
+        weights['CPU4->CPU1b'].set_W(W*self.cpu4_cpu1_m) # scale with 0.5 as in cx_rate.py
         
         weights['CPU4->Pontine']=nw.connect_layers('CPU4', 'Pontine', layers, channel='orange')
         W = np.diag([1.0]*N_CPU4)
@@ -257,9 +267,9 @@ class StoneNetwork :
         
     def evolve(self,T,reset=True,t0=0.,inbound=False,savestep=1.0,
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
-               a=0.1, drag=0.15, hupdate=default_update_m,
+               a=default_a, drag=0.15, hupdate=default_update_m,
                tn2scaling=0.9,noise=0.1,tb1scaling=0.9,
-               mem_init_c=0.25, turn_noise=0.0,
+               mem_init_c=0.15, turn_noise=0.0,
                printtime=False) : 
                
         # Start time is t
@@ -350,7 +360,7 @@ class StoneNetwork :
             self.layers['CL1'].set_input_vector_func(cl1_activity)
         
         # Need a dictionary with the hidden layers
-        overshoots = {'TB1':0,'CPU4':0,'CPU1a':0,'CPU1b':0,'Pontine':0}
+        overshoots = {'TB1':0,'Rectifier':0,'CPU4':0,'CPU1a':0,'CPU1b':0,'Pontine':0}
         start = time.time()
         
         while t < T:

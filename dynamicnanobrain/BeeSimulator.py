@@ -132,11 +132,9 @@ def analyse2(N, param_dict, radius=20):
 # nest during the inbound flight, we also keep track of the size of the search
 # pattern, perhaps this will prove interesting. 
 
-N = 50 # number of trials for each parameter to test
-N_dists = 9 # number of logarithmic distance steps
-
-distances = np.round(10 ** np.linspace(2, 4, N_dists)).astype('int')
-#distances = [1500]
+N = 10 # number of trials for each parameter to test
+distances = [200, 400, 750, 1500, 3000, 6000]
+#distances = np.round(10 ** np.linspace(2, 4, N_dists)).astype('int')
 N_dists= len(distances)
 
 # List of parameters that have been studied (keeping for reference)
@@ -149,10 +147,13 @@ Vt_noise_vals = [0.01, 0.02, 0.05]
 reduced_a = 0.07
 
 # Specify the dict of parameters
-param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for noise in Vt_noise_vals]
+param_dicts = [{'n':N_dists,'T_outbound': distances, 'T_inbound': distances}]
+
+# List of dictionaries
+#param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for noise in Vt_noise_vals]
 #
 # This dictionary specifies an earlier run that I kept the data from
-param_dict_ref = {'n':N_dists, 'a':[reduced_a]*N_dists, 'noise':[0.1]*N_dists, 'T_outbound': distances, 'T_inbound': distances}
+param_dict_ref = {'n':N_dists,'T_outbound': distances, 'T_inbound': distances}
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -245,7 +246,11 @@ min_dist, min_dist_std, search_dist, search_dist_std = trials.analyze_inbound(IN
 
 #%% Or single flight can be generated like this to get the network instance
 my_nw = trials.setup_network(memupdate=0.001) 
-out_res, inb_res, out_travel, inb_travel, overshoots = trials.run_trial(my_nw,500,1000,a=0.08,turn_noise=0.2,straight_route=True,offset=np.pi/4)                                                         
+out_res, inb_res, out_travel, inb_travel, overshoots = trials.run_trial(my_nw,500,1000,a=0.07,turn_noise=0.2,straight_route=True,offset=np.pi/4)                                                         
+
+#%%
+my_nw = trials.setup_network(memupdate=0.001) 
+out_res, inb_res, out_travel, inb_travel, overshoots = trials.run_trial(my_nw,750,1500,a=0.1,mem_init_c=0.15)                                                         
 
 #%% Visualize devices and weights
 plt.ion()
@@ -311,9 +316,9 @@ res = pd.concat([res,motor],axis=1)
 
 # Now let's plot this guy
 #fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','CPU4','CPUin','CPU1'],attr='Pout',titles=True)
-fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','CPU4','CPU1','motor'],attr='Pout',titles=True)
+fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','Rectifier','CPU4','CPU1','motor'],attr='Pout',titles=True)
 
-trials.one_flight_results(out_res, inb_res, out_travel, inb_travel, 'test',interactive=True, cpu4_mem_gain=0.001,radius=20,show_headings=True)
+trials.one_flight_results(out_res, inb_res, out_travel, inb_travel,'test',interactive=True,cpu4_mem_gain=0.0005,radius=20,show_headings=True)
 
 #%%
 cum_min_dist = analysis.compute_path_straightness(V, T_outbound)

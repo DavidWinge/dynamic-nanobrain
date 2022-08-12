@@ -512,6 +512,7 @@ def plot_weights(weights, colormap='viridis', savefig=False) :
                   'CL1': range(1, 17),
                   'TB1': range(1, 9),
                   'TN2': ['L', 'R'],
+                  'Rectifier': range(1,17),
                   'CPU4': range(1, 17),
                   'Pontine': range(1, 17),
                   'CPU1a': range(2, 16),

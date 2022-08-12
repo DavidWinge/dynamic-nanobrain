@@ -52,7 +52,7 @@ my_nw = trials.setup_network(memupdate=1.0)
 
 # %%
 # Draw a shell-structure
-shell_pos = my_nw.show_network(layout='shell',shell_order=('TB1','CPU4',['CPU1a','CPU1b']),exclude_layers=['CL1','TN2','Pontine'])
+shell_pos = my_nw.show_network(layout='shell',shell_order=('TB1','Rectifier','CPU4',['CPU1a','CPU1b']),exclude_layers=['CL1','TN2','Pontine'])
 
 # %%
 # Including the Pontine cells

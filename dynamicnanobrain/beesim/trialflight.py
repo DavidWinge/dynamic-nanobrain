@@ -221,6 +221,7 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
 
     return out_res, inb_res, out_travel, inb_travel, overshoots
 
+# TODO: Use a memscale option to set the memory
 def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
                   cpu_shift=-0.2,Vt_noise=0.0,**kwargs) :
     
@@ -228,13 +229,14 @@ def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0
     # Setup the internal devices
     devices = {}
     devices['TB1']=physics.Device('../parameters/device_parameters.txt')
+    devices['Rectifier']=physics.Device('../parameters/device_parameters.txt')
     devices['CPU4']=physics.Device('../parameters/device_parameters.txt')
     #devices['CPU4'].set_parameter('Cstore',7e-16) # Original is 0.07 10^-15
     devices['CPU4'].set_parameter('Rstore',Rs) # Original 2e6
     devices['CPU4'].print_parameter('Cstore')
     devices['CPU4'].print_parameter('Rstore')
     print(f'Calculate tau_gate={devices["CPU4"].calc_tau_gate()} ns')
-    setup_nw.weights['TB1->CPU4'].print_W()
+    setup_nw.weights['Rectifier->CPU4'].print_W()
     devices['CPU1a']=physics.Device('../parameters/device_parameters.txt')
     devices['CPU1b']=physics.Device('../parameters/device_parameters.txt')
     devices['Pontine']=physics.Device('../parameters/device_parameters.txt')
@@ -244,9 +246,10 @@ def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0
         Vt0 = devices['TB1'].p_dict['Vt']
         devices["TB1"].p_dict['Vt'] = Vt0+onset_shift
         #devices["CPU4"].p_dict['Vt'] = Vt0+cpu_shift
+        #devices['Rectifier'].p_dict['Vt'] = Vt0+cpu_shift
         devices["CPU1a"].p_dict['Vt'] = Vt0+cpu_shift
         devices["CPU1b"].p_dict['Vt'] = Vt0+cpu_shift
-        #devices["Pontine"].p_dict['Vt'] = cpu_shift
+        #devices["Pontine"].p_dict['Vt'] = Vt0 + cpu_shift
 
     # Feed the devices into the network
     setup_nw.assign_device(devices, unity_key='TB1')
