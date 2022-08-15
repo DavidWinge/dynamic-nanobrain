@@ -201,12 +201,8 @@ class HiddenLayer(Layer) :
     def update_V(self, dt) :
         """ Using a fixed dt, update the voltages."""
         self.V += dt*self.dV
-        # Count voltage overshoots
-        overshoots = (self.V<-self.Vthres)*(self.V>self.Vthres)
-        N = np.sum(overshoots)
         # Voltage clipping (third try)
         self.V = np.clip(self.V,-self.Vthres,self.Vthres)
-        return N
     
     def update_I(self, dt) :
         """ Using a fixed dt, update the voltages."""

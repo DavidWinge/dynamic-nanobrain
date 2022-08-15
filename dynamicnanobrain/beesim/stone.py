@@ -359,8 +359,6 @@ class StoneNetwork :
             # Specify the output function
             self.layers['CL1'].set_input_vector_func(cl1_activity)
         
-        # Need a dictionary with the hidden layers
-        overshoots = {'TB1':0,'Rectifier':0,'CPU4':0,'CPU1a':0,'CPU1b':0,'Pontine':0}
         start = time.time()
         
         while t < T:
@@ -370,7 +368,7 @@ class StoneNetwork :
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
             # TODO: Add noise if needed
-            tm.update(dt, t, self.layers, self.weights, overshoots, self.unity_coeff, t0)
+            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0)
             
             if inbound :
                 # update agent heading
@@ -384,6 +382,7 @@ class StoneNetwork :
                 x += v*dt
             
             t += dt
+            print(t,' ns')
             # Log the progress
             if t > savetime :
                 # Put log update here to have (more or less) fixed sample rate
@@ -404,6 +403,6 @@ class StoneNetwork :
         
         if inbound :
             travel = travel_log.get_timelog()
-            return result, travel, overshoots
+            return result, travel
         else :
-            return result, overshoots
+            return result

@@ -25,6 +25,7 @@ from ..core import plotter
 # In the current case, they become relative to BeeSimulator one folder above
 DATA_PATH='../data/beesim'
 PLOT_PATH='../plots/beesim'
+default_device_file = '../parameters/device_parameters_1ns.txt'
 
 def compute_mean_tortuosity(cum_min_dist):
     """Computed with tau = L / C."""
@@ -203,14 +204,14 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
     trial_nw.specify_inputs('TN2', tn2_input, tn2scaling)
 
     # Feed the network the correct input signals for the outbound travel
-    out_res, overshoots = trial_nw.evolve(T=Tout,savestep=savestep,
+    out_res = trial_nw.evolve(T=Tout,savestep=savestep,
                               tn2scaling=tn2scaling,
                               tb1scaling=tb1scaling,
                               noise=noise,
                               **kwargs)
     
     # Let the network navigate the inbound journey
-    inb_res, inb_travel, overshoots = trial_nw.evolve(T=Tout+Tinb,reset=False,t0=Tout,inbound=True,
+    inb_res, inb_travel = trial_nw.evolve(T=Tout+Tinb,reset=False,t0=Tout,inbound=True,
                                        initial_heading=headings[-1],
                                        initial_pos=outbound_end_position,
                                        initial_vel=velocity[-1],
@@ -219,37 +220,37 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
                                        noise=noise,
                                        **kwargs)
 
-    return out_res, inb_res, out_travel, inb_travel, overshoots
+    return out_res, inb_res, out_travel, inb_travel
 
 # TODO: Use a memscale option to set the memory
-def setup_network(Rs=2e11, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
-                  cpu_shift=-0.2,Vt_noise=0.0,**kwargs) :
+def setup_network(memscale=1.0, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
+                  cpu_shift=-0.2,Vt_noise=0.0, device_file=default_device_file, **kwargs) :
     
     setup_nw = stone.StoneNetwork(mem_update_h=memupdate,**kwargs) 
     # Setup the internal devices
     devices = {}
-    devices['TB1']=physics.Device('../parameters/device_parameters.txt')
-    devices['Rectifier']=physics.Device('../parameters/device_parameters.txt')
-    devices['CPU4']=physics.Device('../parameters/device_parameters.txt')
-    #devices['CPU4'].set_parameter('Cstore',7e-16) # Original is 0.07 10^-15
-    devices['CPU4'].set_parameter('Rstore',Rs) # Original 2e6
+    layers = ['TB1','Rectifier','CPU4','CPU1a','CPU1b','Pontine']
+    for layer in layers :
+        devices[layer]=physics.Device(device_file)
+    
+    # Scale the memory unit explicitly
+    R_ref = devices['CPU4'].p_dict['Rstore']
+    C_ref = devices['CPU4'].p_dict['Cstore']
+    devices['CPU4'].set_parameter('Rstore',R_ref*(np.sqrt(memscale)))
+    devices['CPU4'].set_parameter('Cstore',C_ref*(np.sqrt(memscale)))
+    
+    # Some diagnostics
     devices['CPU4'].print_parameter('Cstore')
     devices['CPU4'].print_parameter('Rstore')
     print(f'Calculate tau_gate={devices["CPU4"].calc_tau_gate()} ns')
-    setup_nw.weights['Rectifier->CPU4'].print_W()
-    devices['CPU1a']=physics.Device('../parameters/device_parameters.txt')
-    devices['CPU1b']=physics.Device('../parameters/device_parameters.txt')
-    devices['Pontine']=physics.Device('../parameters/device_parameters.txt')
+    #setup_nw.weights['Rectifier->CPU4'].print_W()
     
+    # Tune the activation functions of the CPU1 neurons
     if manipulate_shift :
         # Get the original Vt
-        Vt0 = devices['TB1'].p_dict['Vt']
-        devices["TB1"].p_dict['Vt'] = Vt0+onset_shift
-        #devices["CPU4"].p_dict['Vt'] = Vt0+cpu_shift
-        #devices['Rectifier'].p_dict['Vt'] = Vt0+cpu_shift
+        Vt0 = devices['CPU1a'].p_dict['Vt']
         devices["CPU1a"].p_dict['Vt'] = Vt0+cpu_shift
         devices["CPU1b"].p_dict['Vt'] = Vt0+cpu_shift
-        #devices["Pontine"].p_dict['Vt'] = Vt0 + cpu_shift
 
     # Feed the devices into the network
     setup_nw.assign_device(devices, unity_key='TB1')
@@ -320,7 +321,7 @@ def decode_position(cpu4_reshaped, cpu4_mem_gain):
     #angle = -np.angle(np.conj(fund_freq))
     # add pi to account for TB1_1 being at np.pi
     angle = -np.angle(fund_freq)
-    scale = 5e-4
+    scale = 0.035
     distance = np.absolute(fund_freq) / cpu4_mem_gain * scale
     return angle, distance
 
@@ -407,7 +408,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
     except:
 
         # Separate out the network arguments
-        network_args = ['Rs','memupdate','cpu_shift','weight_noise','Vt_noise'] # add more here when needed
+        network_args = ['memscale','memupdate','cpu_shift','weight_noise','Vt_noise'] # add more here when needed
         network_kwargs = {k:v for k,v in kwargs.items() if k in network_args}
 
         # These are the other arguments that go into the run_trial call
@@ -435,7 +436,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             # I guess if filtered_kwargs is empty this is an empty call
             trial_nw = setup_network(**network_kwargs)
             
-            out_res, inb_res, out_travel, inb_travel, _ = run_trial( # don't save overshoots
+            out_res, inb_res, out_travel, inb_travel = run_trial( 
                     trial_nw,
                     Tout=T_outbound,
                     Tinb=T_inbound,

@@ -59,14 +59,12 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights, overshoots=None, unity_coeff=1.0, t0=0.,teacher_forcing=False) :   
+def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for key, layer in layers.items() :
         if layer.layer_type == 'hidden' :
-            N = layer.update_V(dt)
-            if overshoots is not None : 
-                overshoots[key] += N
+            layer.update_V(dt)
             layer.update_I(dt) 
         
         if layer.layer_type == 'input' :
