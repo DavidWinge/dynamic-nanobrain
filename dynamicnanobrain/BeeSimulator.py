@@ -201,7 +201,7 @@ my_nw = trials.setup_network(memupdate=1.0,memscale=160000.)
 
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.1,hupdate=4e-4, noise=0.05)                                                         
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1000,2500,a=0.08,straight_route=True, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3) 
-out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3,300,a=0.08, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3, fix_heading=3*np.pi/4) 
+out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3,1500,a=0.08, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3, fix_heading=3*np.pi/4) 
 
 #%% Visualize devices and weights
 plt.ion()

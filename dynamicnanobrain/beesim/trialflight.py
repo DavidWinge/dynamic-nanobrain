@@ -349,7 +349,7 @@ def one_flight_results(out_res,inb_res,out_travel, inb_travel, sim_name, plot_pa
     # 1. Combined trace plot
     comb_res = pd.concat([out_res,inb_res],ignore_index=True)
     
-    fig,_ = beeplotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','CPU4','Pontine','CPU1'],attr='Pout',titles=True)
+    fig,_ = beeplotter.plot_traces(comb_res, layers=['CL1','TB1','TN2','Rectifier','CPU4','CPU1'],attr='Pout',titles=True)
     # Here we need to save the figure
     plotter.save_plot(fig,'traces_'+sim_name,plot_path)
        
@@ -429,11 +429,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             plot_dir = plot_path / dirname
             if not plot_dir.is_dir() : # check first for existance
                 plot_dir.mkdir() # Path object
-            if 'memupdate' in kwargs :
-                cpu4_mem_gain = kwargs['memupdate']
-            else :
-                cpu4_mem_gain = 0.001
-        
+
         l_OUT = [] # list of DataFrames
         l_INB = [] 
         cpu4_snapshots = np.zeros((N,stone.N_CPU4))
@@ -453,7 +449,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             if make_plots :
                 plotname=generate_figurename(T_outbound,T_inbound,i,**kwargs)
                 one_flight_results(out_res,inb_res,out_travel,inb_travel,
-                                   plotname,plot_path=plot_dir,cpu4_mem_gain=cpu4_mem_gain)
+                                   plotname,plot_path=plot_dir,cpu4_mem_gain=trial_nw.mem_update_h)
             # Save the routes to the lists
             l_OUT.append(out_travel)
             l_INB.append(inb_travel)

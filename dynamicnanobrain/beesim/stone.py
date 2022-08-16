@@ -24,7 +24,7 @@ N_CPU1a=14
 N_CPU1b=2
 
 
-default_update_m = 0.0005
+default_update_m = 2e-4
 default_cpu1_input_m = 0.5
 default_a = 0.1
 
@@ -277,8 +277,8 @@ class StoneNetwork :
     def evolve(self,T,reset=True,t0=0.,inbound=False,savestep=1.0,
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
                a=default_a, drag=0.15, hupdate=default_update_m,
-               tn2scaling=0.9,noise=0.1,tb1scaling=0.9,
-               mem_init_c=0.15, turn_noise=0.0, tau_noise=1.,
+               tn2scaling=0.9,noise=0.05,tb1scaling=0.9,
+               mem_init_c=0.3, turn_noise=0.0, tau_noise=1.,
                printtime=False) : 
                
         # Start time is t
@@ -401,9 +401,9 @@ class StoneNetwork :
                 # use a dt here since we do many turns per time unit
                 heading = rotate(heading,motor*dt)
                 # velocity using drag force and acceleration
-                v -= v*drag*dt
                 v[0] += np.sin(heading)*a*dt
                 v[1] += np.cos(heading)*a*dt
+                v -= v*drag*dt
                 x += v*dt
             
             t += dt
