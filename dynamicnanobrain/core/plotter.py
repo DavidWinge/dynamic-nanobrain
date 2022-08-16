@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 #import pandas as pd
 import networkx as nx
 import matplotlib.colors as mcolors
+from pathlib import Path
 
 # Define parameters
 my_dpi = 300
@@ -950,11 +951,10 @@ def visualize_LED_efficiency(example) :
     ax.grid('True')
     plt.tight_layout()
                
-def save_plot(fig, filename, plot_path='plots'):
-    import os
+def save_plot(fig, filename, plot_path=Path('plots/')):
     # Check for folder, otherwise create
-    if not os.path.isdir(plot_path) :
-        os.mkdir(plot_path)
+    if not plot_path.is_dir() :
+        plot_path.mkdir(parents=True)
     # Save the figure 
-    fig.savefig(os.path.join(plot_path, filename + '.png'),
+    fig.savefig(plot_path / (filename + '.png'),
                 bbox_inches='tight', dpi=300)           

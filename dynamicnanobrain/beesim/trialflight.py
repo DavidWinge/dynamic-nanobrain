@@ -14,6 +14,7 @@ import matplotlib.patches as patches
 import os
 import pickle
 from scipy.interpolate import interp1d
+from pathlib import Path
 
 from . import pathtrials
 from . import beeplotter
@@ -23,9 +24,9 @@ from ..core import plotter
 
 # These paths are a bit tricky, as they will be relative to the importing file
 # In the current case, they become relative to BeeSimulator one folder above
-DATA_PATH='../data/beesim'
-PLOT_PATH='../plots/beesim'
-default_device_file = '../parameters/device_parameters_1ns.txt'
+DATA_PATH= Path('../data/beesim/')
+PLOT_PATH= Path('../plots/beesim/')
+default_device_file = Path('../parameters/device_parameters_1ns.txt')
 
 def compute_mean_tortuosity(cum_min_dist):
     """Computed with tau = L / C."""
@@ -287,7 +288,7 @@ def load_dataset(T_outbound, T_inbound, N, **kwargs):
     filename = generate_filename(T_outbound, T_inbound, N,
                                  **kwargs)
     
-    with open(os.path.join(DATA_PATH, filename),'rb') as f :
+    with open(DATA_PATH / filename,'rb') as f :
         # Items read sequentially
         OUT=pickle.load(f)
         INB=pickle.load(f)
@@ -302,7 +303,7 @@ def save_dataset(OUT, INB, T_outbound, T_inbound, N,
                                  **kwargs)
         
     # save to a pickle file
-    with open(os.path.join(DATA_PATH, filename),'wb') as f :
+    with open(DATA_PATH / filename,'wb') as f :
         pickle.dump(OUT,f)
         pickle.dump(INB,f)
         
@@ -425,9 +426,9 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             # Make sure pyplot in in non-interactive mode
             plt.ioff()
             dirname = generate_figurename(T_outbound,T_inbound,N,**kwargs)
-            plot_dir = os.path.join(plot_path,dirname)
-            if not os.path.isdir(plot_dir) : # check first for existance
-                os.mkdir(plot_dir)
+            plot_dir = plot_path / dirname
+            if not plot_dir.is_dir() : # check first for existance
+                plot_dir.mkdir() # Path object
             if 'memupdate' in kwargs :
                 cpu4_mem_gain = kwargs['memupdate']
             else :

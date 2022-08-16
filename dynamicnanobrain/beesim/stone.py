@@ -171,7 +171,8 @@ class StoneNetwork :
         weights['Bias->CPU4']=nw.connect_layers('Bias', 'CPU4', layers, channel='green')
         W = np.ones((N_CPU4,1))
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
-        weights['Bias->CPU4'].set_W(W)        
+        weights['Bias->CPU4'].set_W(W)     
+        weights['Bias->CPU4'].scale_W(self.mem_update_h)
         
         weights['CPU4->CPU1a']=nw.connect_layers('CPU4', 'CPU1a', layers, channel='orange')
         W =   np.array([[0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], #2
