@@ -211,6 +211,10 @@ class HiddenLayer(Layer) :
         self.I += dt*self.device.gammas[-1]*(self.ISD-self.I)
         # Convert current to power through efficiency function
         self.P = self.I*self.device.eta_ABC(self.I)
+        
+    def add_noise(self, noise) :
+        self.P += noise
+        self.P = np.clip(self.P,0,None)
     
     def reset_B(self) :
         """ Set elements of matrix B to 0"""
@@ -342,6 +346,9 @@ class InputLayer(Layer) :
             
         return self.C
     
+    def add_noise(self, noise) :
+        self.C += noise
+        self.C = np.clip(self.C,0,None)
     
 # Inherits Layer    
 class OutputLayer(Layer) :
@@ -505,6 +512,10 @@ class OutputLayer(Layer) :
         """ Reset function."""
         self.reset_B()
         self.reset_teacher_memory(self.nsave)
+    
+    def add_noise(self, noise) :
+        self.C += noise
+        self.C = np.clip(self.C,0,None)
         
 # Connect layers and create a weight matrix
 def connect_layers(down, up, layers, channel) :

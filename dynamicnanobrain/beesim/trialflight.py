@@ -170,6 +170,7 @@ def generate_straight_route(Tout, heading, velocity, offset=0.0) :
     
 def run_trial(trial_nw,Tout=1000,Tinb=1500,
               tn2scaling=0.9,noise=0.1, savestep=1.0,tb1scaling=0.9, 
+              bias_scaling=0.1,
               straight_route=False, fix_heading=0.0, fix_velocity=0.5, offset=0.0,
               **kwargs) :
     
@@ -199,9 +200,14 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
     def tn2_input(scaling) :
         return interp1d(range(Tout), tn2*scaling, axis=0)
         
+    def bias_input(scaling) :
+        bias_func = lambda x : [scaling]
+        return bias_func
+    
     # Setup the inputs for CL1 and TN1
     trial_nw.specify_inputs('CL1', cl1_input, tb1scaling)
     trial_nw.specify_inputs('TN2', tn2_input, tn2scaling)
+    trial_nw.specify_inputs('Bias', bias_input, bias_scaling)
 
     # Feed the network the correct input signals for the outbound travel
     out_res = trial_nw.evolve(T=Tout,savestep=savestep,
@@ -321,7 +327,7 @@ def decode_position(cpu4_reshaped, cpu4_mem_gain):
     #angle = -np.angle(np.conj(fund_freq))
     # add pi to account for TB1_1 being at np.pi
     angle = -np.angle(fund_freq)
-    scale = 0.035
+    scale = 0.2
     distance = np.absolute(fund_freq) / cpu4_mem_gain * scale
     return angle, distance
 

@@ -97,27 +97,30 @@ def analyse2(N, param_dict, radius=20):
 # nest during the inbound flight, we also keep track of the size of the search
 # pattern, perhaps this will prove interesting. 
 
-N = 10 # number of trials for each parameter to test
-distances = [200, 400, 750, 1500, 3000, 6000]
+N = 20 # number of trials for each parameter to test
+distances = [100, 200, 400, 750, 1500, 3000, 6000]
 #distances = np.round(10 ** np.linspace(2, 4, N_dists)).astype('int')
 N_dists= len(distances)
 
 # List of parameters that have been studied (keeping for reference)
 inputscale_vals = [0.7, 0.8, 0.9, 1.0]
-memscale_vals = [1250, 2500, 5000, 10000, 20000, 40000]
+memscale_vals = [1250, 2500, 5000, 10000, 20000, 40000, 80000, 160000]
 memupdate_vals = 0.05/100 * np.sqrt(memscale_vals)
 Vt_noise_vals = [0.01, 0.02, 0.05]
 reduced_a = 0.07
 
 # Specify the dict of parameters
-param_dicts = [{'n':N_dists,'T_outbound': distances, 'T_inbound': distances}]
+param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[1.0]*N_dists,'bias_scaling':[0.1]*N_dists,
+                'hupdate':[2e-4]*N_dists,'noise':[0.05]*N_dists,'mem_init_c':[0.3]*N_dists,
+                'T_outbound': distances,'T_inbound': distances}]
 
 # List of dictionaries
 #param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for noise in Vt_noise_vals]
-param_dicts = [{'n':N_dists, 'memscale':[memscale_vals[k]]*N_dists, 'memupdate':[memupdate_vals[k]]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for k in range(len(memscale_vals))]
+#param_dicts = [{'n':N_dists, 'memscale':[memscale_vals[k]]*N_dists, 'memupdate':[memupdate_vals[k]]*N_dists, 
+#                'T_outbound': distances, 'T_inbound': distances} for k in range(len(memscale_vals))]
 
 # This dictionary specifies an earlier run that I kept the data from
-param_dict_ref = {'n':N_dists,'T_outbound': distances, 'T_inbound': distances}
+#param_dict_ref = {'n':N_dists,'T_outbound': distances, 'T_inbound': distances}
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -132,12 +135,12 @@ for param_dict in param_dicts:
     search_dist_stds.append(search_dist_std)
     
 #%% Extract also other quantaties using another analysis method
-d_angles, d_lens, path_straightness, disc_leaving_angles = analyse2(100, param_dict)
+d_angles, d_lens, path_straightness, disc_leaving_angles = analyse2(N, param_dicts[0])
 
 
 #%% Calcualte tortuosity as a figure of merit
-cum_min_dist = path_straightness[0]
-tortuosity  = trials.compute_tortuosity(path_straightness[0])
+cum_min_dist = path_straightness[-3]
+tortuosity  = trials.compute_tortuosity(path_straightness[-3])
 
 mu = np.nanmean(cum_min_dist, axis=1)
 std = np.nanstd(cum_min_dist, axis=1)
@@ -155,15 +158,14 @@ for param_dict in param_dicts:
     _ , _ , _ , _ , disc_leaving_angle = analyse(N, param_dict)
     disc_leaving_angles.append(disc_leaving_angle)
     
-_, _, _, _, disc_leaving_angle = analyse(100, param_dict_ref)  
-disc_leaving_angles.insert(0,disc_leaving_angle)
-
-fig, ax = beeplotter.plot_angular_distances([0.0]+Vt_noise_vals,disc_leaving_angles,scale=[0.5,1.0,1.0,1.0])
+#fig, ax = beeplotter.plot_angular_distances(memscale_vals,disc_leaving_angles)
+fig, ax = beeplotter.plot_angular_distances([160000],disc_leaving_angles)
 fig.show()
 
 #%% Produce a plot of the success of the specific parameters over distance. 
 # A label for the parameter can be sent just after the parameter values
-fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, ['Ref'], 'Model',ymax=100,xmin=100,xmax=7000)
+#fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, ['Ref'], 'Model',ymax=100,xmin=100,xmax=7000)
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, [160000], 'Memory scale',ymax=150,xmin=100,xmax=6000)
 #fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, meminitc_vals, 'Memory init.',ymax=150,xmin=100,xmax=4000)
 #fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, inputscale_vals, 'Inputscaling',ymax=150,xmin=100,xmax=4000)
 #fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, cpushift_vals, 'Cpu1/4 shift',ymax=150,xmin=100,xmax=8000)
@@ -173,8 +175,9 @@ fig.show()
 
 #%% Produce a plot showing the search pattern width. Here we adjust the 
 # ylabel using an optional variable
-fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, ['Ref'], 'Model',ymax=500,xmin=100,xmax=7000, ylabel='Search pattern width')
+#fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, ['Ref'], 'Model',ymax=500,xmin=100,xmax=7000, ylabel='Search pattern width')
 #fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, meminitc_vals, 'Memory init.', xmin=100, xmax=4000, ylabel='Search pattern width')
+fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, [160000], 'Memory scale', xmin=200, xmax=6000, ylabel='Search pattern width')
 #fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, inputscale_vals, 'Inputscaling', xmin=100, xmax=4000, ylabel='Search pattern width')
 #fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, cpushift_vals, 'Cpu1/4 shift', xmin=100, xmax=8000, ylabel='Search pattern width')
 #fig, ax = beeplotter.plot_distance_v_param(search_dists_l, search_dist_stds, distances, memupdate_vals, 'Memory update', xmin=100, xmax=8000, ylabel='Search pattern width')
@@ -193,8 +196,12 @@ my_nw = trials.setup_network(memscale=10.0)
 out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,500,1000,a=0.07,turn_noise=0.2,straight_route=True,offset=np.pi/4)                                                         
 
 #%%
-my_nw = trials.setup_network(memupdate=0.05,memscale=10000.) 
-out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.1,mem_init_c=0.15,hupdate=5.e-4)                                                         
+#my_nw = trials.setup_network(memupdate=0.05,memscale=10000.,pon_cpu1_m=0.0) 
+my_nw = trials.setup_network(memupdate=1.0,memscale=160000.)
+
+#out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.1,hupdate=4e-4, noise=0.05)                                                         
+out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1000,1500,a=0.08,straight_route=True, noise=0.05,noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3) 
+#out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.08, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3, fix_heading=3*np.pi/4) 
 
 #%% Visualize devices and weights
 plt.ion()
@@ -260,9 +267,9 @@ res = pd.concat([res,motor],axis=1)
 
 # Now let's plot this guy
 #fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','CPU4','CPUin','CPU1'],attr='Pout',titles=True)
-fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','Rectifier','CPU4','CPU1','motor'],attr='Pout',titles=True)
+fig,_ = beeplotter.plot_traces(res, layers=['CL1','TB1','TN2','Rectifier','CPU4','CPU1','motor'],attr='Pout',titles=True, filtering=False)
 
-trials.one_flight_results(out_res, inb_res, out_travel, inb_travel,'test',interactive=True,cpu4_mem_gain=0.05,radius=20,show_headings=True)
+trials.one_flight_results(out_res, inb_res, out_travel, inb_travel,'test',interactive=True,cpu4_mem_gain=my_nw.mem_update_h,radius=20,show_headings=True)
 
 #%%
 cum_min_dist = analysis.compute_path_straightness(V, T_outbound)
@@ -321,6 +328,7 @@ plotter.plot_nodes(out_res, nodes=TB1_list, onecolumn=True)
 
 CPU4_list = [f'CPU4_{idx}' for idx in range(0,16)]
 plotter.plot_nodes(out_res, nodes=CPU4_list)
+plotter.plot_nodes(inb_res, nodes=CPU4_list)
 
 Pontine_list = [f'Pontine_{idx}' for idx in range(0,16)]
 plotter.plot_nodes(inb_res,nodes=Pontine_list)

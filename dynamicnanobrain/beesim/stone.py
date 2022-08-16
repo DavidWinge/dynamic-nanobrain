@@ -13,7 +13,7 @@ from ..core import networker as nw
 from ..core import plotter
 from ..core import logger
 from ..core import timemarching as tm
-
+from scipy.interpolate import interp1d
 
 N_TB1=8
 N_CL1=16
@@ -77,6 +77,7 @@ class StoneNetwork :
         self.cpu4_cpu1_m = cpu4_cpu1_m
         self.pon_cpu1_m = pon_cpu1_m
         self.tb1_cpu1_m = tb1_cpu1_m
+
         # Specify noise in weights before setting weights
         self.weight_noise = weight_noise
         if self.weight_noise > 0.0 :
@@ -110,6 +111,7 @@ class StoneNetwork :
         # input layers
         layers['CL1'] = nw.InputLayer(N=N_CL1)
         layers['TN2'] = nw.InputLayer(N=N_TN2)
+        layers['Bias'] = nw.InputLayer(N=1)
         # ring layers
         layers['TB1'] = nw.HiddenLayer(N=N_TB1, output_channel='green', inhibition_channel='green', excitation_channel='blue')
         # Add a rectifying layer that is not in the Stone model
@@ -164,6 +166,12 @@ class StoneNetwork :
         if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
         weights['Rectifier->CPU4'].set_W(W)
         weights['Rectifier->CPU4'].scale_W(self.mem_update_h)
+        
+        # Diagonal weights connecting the rectifier to the CPU4 layer 
+        weights['Bias->CPU4']=nw.connect_layers('Bias', 'CPU4', layers, channel='green')
+        W = np.ones((N_CPU4,1))
+        if self.noisy_weights : W = self.noisify_weights(W,self.weight_noise)
+        weights['Bias->CPU4'].set_W(W)        
         
         weights['CPU4->CPU1a']=nw.connect_layers('CPU4', 'CPU1a', layers, channel='orange')
         W =   np.array([[0., 0., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 0.], #2
@@ -269,7 +277,7 @@ class StoneNetwork :
                initial_pos=(0,0),initial_vel=(0,0),initial_heading=0,
                a=default_a, drag=0.15, hupdate=default_update_m,
                tn2scaling=0.9,noise=0.1,tb1scaling=0.9,
-               mem_init_c=0.15, turn_noise=0.0,
+               mem_init_c=0.15, turn_noise=0.0, tau_noise=1.,
                printtime=False) : 
                
         # Start time is t
@@ -332,6 +340,7 @@ class StoneNetwork :
             cl1_slope_tuned = 3.0
             cl1_bias_tuned = -0.5
             
+            # TODO: Shorter if clip is no longer needed
             def noisy_sigmoid(v, slope=1.0, bias=0.5, noise=0.01):
                 """Takes a vector v as input, puts through sigmoid and
                 adds Gaussian noise. Results are clipped to return rate
@@ -344,11 +353,11 @@ class StoneNetwork :
             
             def tl2_activity(heading):
                 output = np.cos(heading - TL_angles)
-                return noisy_sigmoid(output, tl2_slope_tuned, tl2_bias_tuned, noise=noise)
+                return noisy_sigmoid(output, tl2_slope_tuned, tl2_bias_tuned, noise=0.)
             
             def cl1_activity(t):
                 output = tl2_activity(heading)
-                sig = noisy_sigmoid(-output, cl1_slope_tuned, cl1_bias_tuned, noise=noise)
+                sig = noisy_sigmoid(-output, cl1_slope_tuned, cl1_bias_tuned, noise=0.)
                 # scale by the standard current factor
                 return sig*self.Imax*tb1scaling
             
@@ -359,6 +368,20 @@ class StoneNetwork :
             # Specify the output function
             self.layers['CL1'].set_input_vector_func(cl1_activity)
         
+        # Generate the noise arrays for the relevant times:
+        noisy_layers = ['CL1','TN2','TB1','CPU4']
+        noise_arrays = {}
+        noise_funcs = {}
+        times = np.arange(t0,T,step=tau_noise)
+        for key in noisy_layers :
+            noise_arrays[key] = np.random.normal(scale=noise,size=(len(times),self.layers[key].N))
+            if self.layers[key].layer_type=='hidden' :
+                noise_arrays[key] *= self.Imax/self.unity_coeff
+            else :
+                noise_arrays[key] *= self.Imax
+            # Now we interpolate
+            noise_funcs[key] = interp1d(times, noise_arrays[key], axis=0,kind='nearest')  
+        
         start = time.time()
         
         while t < T:
@@ -367,8 +390,9 @@ class StoneNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
-            # TODO: Add noise if needed
-            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0)
+            # TODO: Add noise if needed, send as a dictionary of arrays
+            tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0, noise=noise_funcs)
+            #tm.update(dt, t, self.layers, self.weights, self.unity_coeff, t0)
             
             if inbound :
                 # update agent heading
@@ -382,7 +406,7 @@ class StoneNetwork :
                 x += v*dt
             
             t += dt
-            print(t,' ns')
+            #print(t,' ns')
             # Log the progress
             if t > savetime :
                 # Put log update here to have (more or less) fixed sample rate

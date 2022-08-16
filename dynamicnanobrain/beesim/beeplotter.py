@@ -17,7 +17,7 @@ def filter_trace(trace,sigma) :
     from scipy.ndimage import gaussian_filter1d
     return gaussian_filter1d(trace, sigma,axis=0)
 
-def subplot_trace(target, res, layer, attr, titles) :
+def subplot_trace(target, res, layer, attr, titles, filtering) :
     # Get the relevant nodes
     columns = [name for name in res.columns if (attr in name) and (layer in name)]
     
@@ -27,7 +27,7 @@ def subplot_trace(target, res, layer, attr, titles) :
     if layer == 'CPUin' :
         columns.insert(0,columns.pop(-1))
     
-    if layer == 'TN2' :
+    if layer == 'TN2' and filtering :
         print('Filtering')
         res[columns] = filter_trace(res[columns],sigma=50)
     #print(columns)
@@ -105,7 +105,7 @@ def plot_homing_dist(cpu4, summed=None) :
     
 
 def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
-                time_interval=None, titles=False)    :
+                time_interval=None, titles=False, filtering=False)    :
            
     import warnings
     warnings.filterwarnings('ignore',category=UserWarning) # get rid of some red text...
@@ -129,9 +129,9 @@ def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
         
     if Nrows > 1 :
         for k, ax in enumerate(axs.flatten()) :
-            subplot_trace(ax, select_res, layers[k], attr, titles)
+            subplot_trace(ax, select_res, layers[k], attr, titles, filtering)
     else:
-        subplot_trace(axs, select_res, layers[0], attr, titles)
+        subplot_trace(axs, select_res, layers[0], attr, titles, filtering)
         
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()

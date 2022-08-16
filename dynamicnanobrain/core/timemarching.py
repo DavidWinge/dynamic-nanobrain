@@ -59,7 +59,7 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False) :   
+def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False, noise=None) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for key, layer in layers.items() :
@@ -77,7 +77,14 @@ def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False)
             else :
                 # Send the signals back into the network, if connected
                 layer.update_C_from_B(t,t0)
-                          
+                    
+        # Add a prespecified noise value
+        if noise is not None :
+            try :
+                layer.add_noise(noise[key](t))
+            except :
+                pass
+            
         layer.reset_B()
     
     # Now we rewrite the currents B according to the weight rules
