@@ -138,6 +138,31 @@ def plot_traces(res, layers, attr, onecolumn=False, doublewidth=True,
     
     return fig, axs
 
+def plot_tortuosity(cum_min_dist, ax=None,
+                    label_font_size=10, unit_font_size=10,title=None) :
+    
+    if ax is None:
+        fig, ax = plt.subplots(figsize=(nature_single, nature_single))
+
+    mu = np.nanmean(cum_min_dist, axis=1)
+    std = np.nanstd(cum_min_dist, axis=1)
+
+    xvals = np.linspace(0,2,cum_min_dist.shape[0])
+        
+    ax.plot(xvals,mu)
+    ax.plot(xvals,mu+std,'k--')
+    ax.plot(xvals,mu-std,'k--')
+    ax.plot([0.0,1.0],[1.0,0.0],'-')
+    
+    ax.set_title(title, fontsize=label_font_size)
+    ax.set_xlabel('Distance traveled / turning point distance', fontsize=label_font_size)
+    ax.set_ylabel('Distance from home (fraction)', fontsize=label_font_size)
+    ax.set_xlim(0,2)
+    ax.set_ylim(0,1)
+    plt.tight_layout()
+    
+    return fig, ax
+
 def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
                           param_name,ylabel='Distance (steps)',
                           ax=None, label_font_size=11, unit_font_size=10,
@@ -188,7 +213,7 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     return fig, ax
 
 def plot_angular_distance_histogram(angular_distance, scale=1.0, ax=None, bins=36,
-                                    color='b'):
+                                    color='b',labelname=''):
     fig = None
     if ax is None:
         fig, ax = plt.subplots(figsize=(nature_single, nature_single))
@@ -207,7 +232,7 @@ def plot_angular_distance_histogram(angular_distance, scale=1.0, ax=None, bins=3
     radii[radii == 0] = 1
     theta = np.linspace(0, 2 * np.pi, bins+1, endpoint=True)
 
-    ax.plot(theta, scale*radii, color=color, alpha=0.5)
+    ax.plot(theta, scale*radii, color=color, alpha=0.5,label=labelname)
     if color:
         ax.fill_between(theta, 0, radii*scale, alpha=0.2, color=color)
     else:
@@ -228,13 +253,13 @@ def plot_angular_distances(noise_levels, angular_distances, bins=18, ax=None,
         scale = [1.0]*len(noise_levels)
     for i in reversed(range(len(noise_levels))):
         plot_angular_distance_histogram(angular_distance=angular_distances[i],scale=scale[i],
-                                        ax=ax, bins=bins, color=colors[i])
+                                        ax=ax, bins=bins, color=colors[i],labelname=noise_levels[i])
 
     ax.set_theta_zero_location("N")
     ax.set_theta_direction(-1)
     ax.set_rlabel_position(22)
     ax.set_title(title, y=1.08, fontsize=label_font_size)
-
+    ax.legend(labelcolor='linecolor')
     if log_scale:
         ax.set_rscale('log')
         ax.set_rlim(0.0, 10001)  # What determines this?

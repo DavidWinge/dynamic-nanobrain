@@ -68,7 +68,7 @@ def compute_path_straightness(INB):
     # Time is stretched to compensate for longer/shorter routes
     cum_min_dist_norm = []
     for i in np.arange(N):
-        t = cum_speed[:,i]
+        t = cum_speed[:,i] # Time is distance traveled now
         xs = np.linspace(0, turn_dists[i]*2, 500, endpoint=False)
         cum_min_dist_norm.append(np.interp(xs,
                                            t,
@@ -102,7 +102,7 @@ def analyze_angle(INB, radius=20):
     for k in range(0,N) :
         
         return_angles[k] = np.arctan2(INB['x'].loc[k,leaving_point[k]] - x_turning_point[k],
-                                   INB['y'].loc[k,leaving_point[k]] - y_turning_point[k])
+                                      INB['y'].loc[k,leaving_point[k]] - y_turning_point[k])
         
     return angular_distance(nest_angles, return_angles)
 
@@ -268,24 +268,16 @@ def setup_network(memscale=1.0, memupdate=0.001, manipulate_shift=True, onset_sh
     
     return setup_nw
 
-def generate_filename(T_outbound, T_inbound, N, **kwargs):
+def generate_filename(T_outbound, T_inbound, N, suffix='', **kwargs):
     filename = 'out{0}_in{1}_N{2}'.format(str(T_outbound),
                                                 str(T_inbound),
                                                 str(N))
     for k, v in kwargs.items():
-        filename += '_' + k + str(v)
-    return filename + '.pkl'
-
-def generate_figurename(T_outbound, T_inbound, N, **kwargs):
-    filename = 'out{0}_in{1}_N{2}'.format(str(T_outbound),
-                                          str(T_inbound),  
-                                          str(N))
-    for k, v in kwargs.items():
-        filename += '_' + k + str(v)
-    return filename
+        filename += f'_{k}{v:.2g}' 
+    return filename + suffix
 
 def load_dataset(T_outbound, T_inbound, N, **kwargs):
-    filename = generate_filename(T_outbound, T_inbound, N,
+    filename = generate_filename(T_outbound, T_inbound, N,suffix='.pkl',
                                  **kwargs)
     
     with open(DATA_PATH / filename,'rb') as f :
@@ -299,7 +291,7 @@ def load_dataset(T_outbound, T_inbound, N, **kwargs):
 
 def save_dataset(OUT, INB, T_outbound, T_inbound, N,
                  **kwargs):
-    filename = generate_filename(T_outbound, T_inbound, N,
+    filename = generate_filename(T_outbound, T_inbound, N,suffix='.pkl',
                                  **kwargs)
         
     # save to a pickle file
@@ -425,7 +417,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
         if make_plots :
             # Make sure pyplot in in non-interactive mode
             plt.ioff()
-            dirname = generate_figurename(T_outbound,T_inbound,N,**kwargs)
+            dirname = generate_filename(T_outbound,T_inbound,N,**kwargs)
             plot_dir = plot_path / dirname
             if not plot_dir.is_dir() : # check first for existance
                 plot_dir.mkdir() # Path object
@@ -447,7 +439,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
             
             # Generate plots here
             if make_plots :
-                plotname=generate_figurename(T_outbound,T_inbound,i,**kwargs)
+                plotname=generate_filename(T_outbound,T_inbound,i,**kwargs)
                 one_flight_results(out_res,inb_res,out_travel,inb_travel,
                                    plotname,plot_path=plot_dir,cpu4_mem_gain=trial_nw.mem_update_h)
             # Save the routes to the lists

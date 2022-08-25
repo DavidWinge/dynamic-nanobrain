@@ -128,6 +128,8 @@ class HiddenLayer(Layer) :
         self.Bscale=np.diag([1e-18/self.device.p_dict['Cinh'],
                              1e-18/self.device.p_dict['Cexc'],
                              0.])
+        self.Adist = np.zeros((self.N,3,3))
+        self.Adist[:] = self.device.A
         
     def generate_uniform_Adist(self, scale) :
         """Here we do another variation of the memory constants"""
@@ -138,7 +140,7 @@ class HiddenLayer(Layer) :
             R_ref = self.device.p_dict['Rstore']
             C_ref = self.device.p_dict['Cstore']
             rng = np.random.RandomState()
-            scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
+            scale_RC_dist = np.sqrt(rng.uniform(1.-scale,1.+scale,size=self.N))
             for k in range(0,self.N) :
                 A[k] = self.device.calc_A(R_ref*scale_RC_dist[k],C_ref*scale_RC_dist[k])
             self.Adist = A
@@ -151,10 +153,10 @@ class HiddenLayer(Layer) :
             R_ref = self.device.p_dict['Rstore']
             C_ref = self.device.p_dict['Cstore']
             rng = np.random.RandomState()
-            scale_RC_dist = np.sqrt(rng.exponential(scale=mean,size=self.N))
+            scale_RC_dist = rng.exponential(scale=mean,size=self.N)
             #scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
             for k in range(0,self.N) :
-                A[k] = self.device.calc_A(R_ref*(1+scale_RC_dist[k]),C_ref*(1+scale_RC_dist[k]))
+                A[k] = self.device.calc_A(R_ref*np.sqrt(1.+scale_RC_dist[k]),C_ref*np.sqrt(1+scale_RC_dist[k]))
             self.Adist = A
             
     def generate_poisson_Adist(self, mean) :
@@ -165,7 +167,7 @@ class HiddenLayer(Layer) :
             R_ref = self.device.p_dict['Rstore']
             C_ref = self.device.p_dict['Cstore']
             rng = np.random.RandomState()
-            scale_RC_dist = np.sqrt(rng.poisson(scale=mean,size=self.N))
+            scale_RC_dist = np.sqrt(rng.poisson(lam=mean,size=self.N))
             #scale_RC_dist = np.sqrt(rng.uniform(1.0,scale**2,size=self.N))
             for k in range(0,self.N) :
                 A[k] = self.device.calc_A(R_ref*(1+scale_RC_dist[k]),C_ref*(1+scale_RC_dist[k]))

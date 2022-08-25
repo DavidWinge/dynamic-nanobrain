@@ -370,7 +370,8 @@ class StoneNetwork :
             self.layers['CL1'].set_input_vector_func(cl1_activity)
         
         # Generate the noise arrays for the relevant times:
-        noisy_layers = ['CL1','TN2','TB1','CPU4']
+        #noisy_layers = ['CL1','TN2','TB1','CPU4'] version used for the N=100 results
+        noisy_layers = ['CL1','TN2','CPU1a','CPU1b']
         noise_arrays = {}
         noise_funcs = {}
         times = np.arange(t0,T,step=tau_noise)
