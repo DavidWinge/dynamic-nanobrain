@@ -16,7 +16,7 @@ class EchoStateNetwork :
     
     def __init__(self,N,input_handle=None,bias_handle=None,teacher_handle=None,
                  input_scaling=1.0,bias_scaling=1.0,teacher_scaling=1.0,
-                 spectral_radius=1.0, sparsity=0.9, timescale=0.5,
+                 spectral_radius=1.0, sparsity=10, timescale=0.5,
                  device=None,silent=False,savefig=False,seed=None) :
         
         self.N = N
@@ -56,11 +56,34 @@ class EchoStateNetwork :
 
         # instead of a return statement we do this to be able to call it from
         # outside the class scope easily
-        self.layers, self.weights = self.initialize_nw(self.N,self.sparsity,**kwargs)
+        if self.N==1 :
+            self.layers, self.weights =  self.initialize_single_node_nw(self.N,**kwargs)
+        else :
+            self.layers, self.weights = self.initialize_nw(self.N,self.sparsity,**kwargs)
         
         # Reassign the device
         if self.device is not None :
             self.assign_device(self.device)
+            
+    def initialize_single_node_nw(self,N=1,Ninput=2,Noutput=1,initialize_output=False,feedback=True,Wfb_scale=1.0) :
+    
+        layers = {} 
+        # An input layer automatically creates on node for each channel that we define
+        layers[0] = nw.InputLayer(Ninput) # One for bias, one for exciting input
+        # Hidden layer, one excitatiory only
+        layers[1] = nw.HiddenLayer(N, output_channel='blue',excitation_channel='blue',inhibition_channel='red')
+        # Output layer
+        layers[3] = nw.OutputLayer(Noutput) # Only readout exciting output
+        
+        weights = {}
+        # The syntax is connect_layers(from_layer, to_layer, layers, channel)
+        # Connections into the reservoir from input layer
+        weights['inp->hd0'] = nw.connect_layers(0, 1, layers, 'blue')
+        #rng = np.random.RandomState(self.seed)
+        W_in = np.ones((N, Ninput)) 
+        weights['inp->hd0'].set_W(W_in) # random weights
+        
+        return layers, weights
         
     def initialize_nw(self,N,sparsity,initialize_output=False,feedback=True,Wfb_scale=1.0,Noutput=1) :
         # We will use a standard set of channels for now    
@@ -103,12 +126,20 @@ class EchoStateNetwork :
         weights['inp->hd0'].set_W(W_in[:N//2]) # first half
         weights['inp->hd1'].set_W(W_in[N//2:]) # second half
         
+        W_res = np.zeros((N,N))
+        # Generate a set of random connections for each node
+        adj_sparsity = min(N,sparsity)
+        for row in range(N) :
+            selection = rng.choice(N,size=adj_sparsity)
+            rnd_w = rng.rand(adj_sparsity) # all positive [0,1)
+            W_res[row][selection] = rnd_w
+        
         # Generate a large matrix of values for the whole reservoir 
-        W_res = rng.rand(N, N)  # all positive [0,1)
+        #W_res = rng.rand(N, N)  # all positive [0,1) # old generation
         # Rightmost half side of this matrix will effectively be negative weights (-- and -+)
         W_res[:,N//2:] *= -1 
         # Delete the fraction of connections given by sparsity:
-        W_res[rng.rand(*W_res.shape) < sparsity] = 0
+        #W_res[rng.rand(*W_res.shape) < sparsity] = 0 # old sparsity process
         # Delete any remaining diagonal elements (we can't have those)
         for k in range(0,N) :
             W_res[k,k] = 0.
@@ -156,7 +187,10 @@ class EchoStateNetwork :
         
         W_res_out = np.zeros(self.weights['hd0->out'].ask_W(silent=True)) # ask_W returns shape
         # Set the weights for the blue output
-        W_res_out=W_out[:,:self.N//2] # from hd0 only (excitatory)
+        if self.N > 1 :
+            W_res_out=W_out[:,:self.N//2] # from hd0 only (excitatory)
+        else : 
+            W_res_out=W_out[:,:self.N]
         self.weights['hd0->out'].set_W(W_res_out)
         # Update the B value correspondingly, as they are newly connected
         #C = np.einsum('i,j->ij',self.weights['hd0->out'].D,self.layers[1].P)
@@ -168,7 +202,11 @@ class EchoStateNetwork :
             
         W_inout = np.zeros(self.weights['inp->out'].ask_W(silent=True))
         # Set the weights for the input-output coupling
-        W_inout=W_out[:,self.N//2:] # elements not from reservoir
+        if self.N > 1 :
+            W_inout=W_out[:,self.N//2:] # elements not from reservoir
+        else :
+            W_inout=W_out[:,self.N:] # elements not from reservoir
+            
         self.weights['inp->out'].set_W(W_inout)
         # Also here we add the currents to B
         C = self.layers[0].C
@@ -198,7 +236,8 @@ class EchoStateNetwork :
             
     def assign_device(self, device) :
         self.layers[1].assign_device(device)
-        self.layers[2].assign_device(device)
+        if self.N > 1 :
+            self.layers[2].assign_device(device)
         self.unity_coeff, self.Imax = device.inverse_gain_coefficient(device.eta_ABC, self.layers[1].Vthres)
         
     def randomize_memory(self,noise=0.1,dist='normal') :
@@ -229,22 +268,27 @@ class EchoStateNetwork :
             A33[k-1] = self.layers[k].Adist
         return A33
     
-    def specify_inputs(self,input_handle,bias_handle,teacher_handle) :
+    def specify_inputs(self,input_handle,bias_handle,teacher_handle,fixImax=None) :
+        if fixImax is None :
+            scaleImax = self.Imax
+        else :
+            scaleImax = fixImax
+            
         if input_handle is not None :
             # Since the last revision, input layers are more general and nodes
             # are not strictly connected to a specific channel
             # Here we take 0 as bias and 1 as input, both in blue channel
             self.layers[0].set_input_func_per_node(1,
-                                          func_handle=input_handle(self.Imax*self.input_scaling))    
+                                          func_handle=input_handle(scaleImax*self.input_scaling))    
             self.input_handle = input_handle
         
         if bias_handle is not None :
             self.layers[0].set_input_func_per_node(0,
-                                          func_handle=bias_handle(self.Imax*self.bias_scaling))
+                                          func_handle=bias_handle(scaleImax*self.bias_scaling))
             self.bias_handle = bias_handle
             
         if teacher_handle is not None :
-            self.layers[3].set_output_func(func_handle=teacher_handle(self.Imax*self.teacher_scaling))
+            self.layers[3].set_output_func(func_handle=teacher_handle(scaleImax*self.teacher_scaling))
             self.teacher_handle = teacher_handle
             
     def set_delay(self, delay,nsave=None) :
@@ -390,7 +434,7 @@ class EchoStateNetwork :
         
    
         # Now we need to specify some weights from the input and reservoir unit
-        #print('The following weights were found:\n', W_out)
+        print('The following weights were found:\n', W_out)
         # apply learned weights to the collected states:
         self.add_trained_weights(W_out,'blue')
 

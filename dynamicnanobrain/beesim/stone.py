@@ -264,8 +264,11 @@ class StoneNetwork :
         self.mem_coeff, self.mem_Imax = device.inverse_gain_coefficient(device.eta_ABC, self.layers[key].Vthres)
         return self.mem_coeff, self.mem_Imax
     
-    def specify_inputs(self,key,input_handle,scaling=1.0) :
-        self.layers[key].set_input_vector_func(func_handle=input_handle(scaling*self.Imax))
+    def specify_inputs(self,key,input_handle,scaling=1.0,fixImax=None) :
+        if fixImax is None :
+            self.layers[key].set_input_vector_func(func_handle=input_handle(scaling*self.Imax))
+        else :  
+            self.layers[key].set_input_vector_func(func_handle=input_handle(scaling*fixImax))
         
     def updateheading(self,heading,layers,update_m=default_update_m,noise=0.0) :
         # sum left and right hand turning neurons

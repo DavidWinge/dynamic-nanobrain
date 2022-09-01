@@ -777,6 +777,44 @@ def plot_chainlist(res, G, source, target, search_string='Pout', doublewidth=Tru
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
+def sample_npseries(tseries,states,Nplots=12,Ninput=0,onecolumn=False, doublewidth=True, 
+                    overlay=None, rolling_avg=False) :
+    import numpy as np 
+    
+    N = states.shape[1] # assume time is along axis 0
+    
+    # select Nplots from these N states, excluding input
+    from numpy.random import default_rng
+    rng = default_rng()
+    selection = rng.choice(N,size=Nplots,replace=False)
+    
+    Nrows = max( Nplots // 3 + int(bool(Nplots % 3)), 1 )  # choose three in a row as max
+    Ncols = min(3,Nplots)
+    
+    if onecolumn : Nrows = Nplots ; Ncols = 1
+    if doublewidth : 
+        nature_width = nature_double 
+    else :  
+        nature_width = nature_single
+
+    def moving_average(x, w):
+        return np.convolve(x, np.ones(w), 'same') / w
+    
+    fig, axs = plt.subplots(Nrows, Ncols, 
+                            figsize=(nature_width*Ncols, nature_single*Nrows))
+    
+    for k, sel in enumerate(selection) :
+        ax = axs.flatten()[k]
+        ax.plot(tseries,states[:,selection[k]],label=f'node {selection[k]}')
+        if overlay is not None :
+            ax.plot(tseries,overlay,'r--')
+        if rolling_avg:
+            ax.plot(tseries,moving_average(states[:,selection[k]],100))
+        ax.legend()
+        ax.set_xlabel('Time (ns)')
+
+    return fig, axs
+        
 def plot_nodes(res, nodes, plot_all=False, onecolumn=False, doublewidth=True,
                time_interval=None) :
     

@@ -41,6 +41,8 @@ rng = np.random.RandomState()
 PLOT_PATH= Path('../plots/esn/')
 DATA_PATH= Path('../data/esn/')
 
+
+#%% Signal generation block
 def signal_shape_generator(tend,ttest,f0,dT,tnoise=0,res=25,noise=0.0,amp_shift=0.4) :
     # determine the size of the sequence
     dt = f0**-1/res
@@ -86,14 +88,12 @@ def signal_shape_generator(tend,ttest,f0,dT,tnoise=0,res=25,noise=0.0,amp_shift=
         
     return shape_control,signal+input_noise,tseries
 
-def signal_freq_change_generator(tstart,tlength,ttest,f0,df,Nf,dT,tnoise=0,res=25,noise=0.0,amp_shift=0.4) :
+def signal_freq_change_generator(tstart,tlength,ttest,fs,dT,tnoise=0,res=25,noise=0.0,amp_shift=0.4) :
     # For all frequencies, build a set of signals that we simply concatenate in the end
     signals = {}
     shape_controls = {}
     tseriess = {}
-    for m in range(-Nf,Nf+1) :
-        # Determine the actual frequency
-        f = f0 + df*m
+    for m,f in enumerate(fs) :
         # Determine the size of the sequency
         dt = f**-1/res
         N = int(tlength/dt) # steps of each time interval
@@ -139,7 +139,7 @@ def signal_freq_change_generator(tstart,tlength,ttest,f0,df,Nf,dT,tnoise=0,res=2
             signals[m] = signal
             
         shape_controls[m] = shape_control
-        tseriess[m] = tseries + tstart + (m-1)*tlength
+        tseriess[m] = tseries + tstart + m*tlength
 
     # Now concatenate the stuff
     shape_control = np.concatenate(tuple(shape_controls.values()))
@@ -147,7 +147,8 @@ def signal_freq_change_generator(tstart,tlength,ttest,f0,df,Nf,dT,tnoise=0,res=2
     tseries = np.concatenate(tuple(tseriess.values()))
     
     return shape_control, signal, tseries
-                
+   
+#%% Methods to run a single simualtion             
 def train_network(network,teacher_signal,Tfit=300,beta=10) :
     
     # Harvest states
@@ -161,8 +162,7 @@ def train_network(network,teacher_signal,Tfit=300,beta=10) :
     
     return pred_train, train_error, tseries_train, states_train
 
-def characterize_network(network, tseries_train, pred_train, 
-                         teacher_signal, T0=300, Tpred=300) :
+def characterize_network(network, teacher_signal, T0=300, Tpred=300) :
     
     tseries_test, pred_test, movie_series, plot_series = network.predict(T0,T0+Tpred,output_all=True)
     # Get the target signal
@@ -174,8 +174,32 @@ def characterize_network(network, tseries_train, pred_train,
     
     return pred_test, pred_error, tseries_test
 
-            
-def evaluate_noise(tseries_test, pred_test, Tnoise,transient=10,
+def evaluate_freq_change_noise(tseries_test,pred_test,fs,Tfit,Tpred,Tnoise,
+                               transient=10,plotname='freq_change_test',makeplot=False) :
+    signal_diff_l = []
+    avg_var_l = []
+    
+    for k,f in enumerate([0]+fs) : # Add [0] to list to cover also f0 SNR
+        # Pick out the relevant time series
+        t2 = Tfit+Tpred*(k+1)
+        t1 = t2-Tnoise
+        N1 = np.flatnonzero(tseries_test>t1)[0]
+        try :
+            N2 = np.flatnonzero(tseries_test>t2)[0]
+        except IndexError :
+            # throws an error if there is no such element, i.e. vector ends
+            N2 = -1
+        # Evaluate noise according to previous procedure
+        mean_low, mean_high, var_low,var_high = evaluate_noise(tseries_test[N1:N2],
+                                                               pred_test[N1:N2],
+                                                               plotname=plotname+str(k),
+                                                               makeplot=makeplot)
+        signal_diff_l.append(max(mean_high-mean_low,0))
+        avg_var_l.append((var_high+var_low)/2)
+     
+    return signal_diff_l, avg_var_l
+
+def evaluate_noise(tseries_test, pred_test, transient=10,
                    plotname='noise',makeplot=False) :
        
     transN = np.flatnonzero(tseries_test>tseries_test[0]+transient)[0]
@@ -196,7 +220,7 @@ def evaluate_noise(tseries_test, pred_test, Tnoise,transient=10,
  
         ax1.set_xlabel('Time (ns)')
         ax1.set_ylabel('Output signal (nA)')
-        ax1.set_ylim(0,pred_test[:,0].max()+25)
+        ax1.set_ylim(pred_test[:,0].min()-25,pred_test[:,0].max()+25)
         plotter.save_plot(fig,'noise'+plotname,PLOT_PATH)
         plt.close(fig)
         
@@ -237,11 +261,11 @@ def plot_memory_dist(network,plotname) :
     plt.close(fig)
     
  
-def run_shape_test(f0=0.05,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,sparsity=10,
-             transient=0,plotname='shapetest',generate_plots=True,seed=None,noise=0.,
-             spectral_radius=0.6,input_scaling=0.5,bias_scaling=0.1,diagnostic=False,
-             teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='exp',
-             fixImax=None,beta=10,tnoise=0) :
+def run_shape_test(f0=0.1,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,sparsity=10,
+             transient=0,plotname='shapefreqtest',generate_plots=True,seed=None,noise=0.,
+             spectral_radius=0.6,input_scaling=0.8,bias_scaling=0.1,diagnostic=False,
+             teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='uniform',
+             fixImax=None,beta=1e4,tnoise=0,fs=[]) :
 
    # Specify device, start with the 1 ns device that we will scale
     propagator = physics.Device('../parameters/device_parameters_1ns.txt')
@@ -265,7 +289,14 @@ def run_shape_test(f0=0.05,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100
         #plot_memory_dist(new_esn)
         
     # input signal is a varying sine/square pulse
-    shape_control, signal_input, tseries = signal_shape_generator(Tfit+Tpred+Tnoise,Tnoise,f0,dT,noise=noise,tnoise=tnoise) 
+    shape_control, signal_input, tseries = signal_shape_generator(Tfit+Tpred,Tnoise,f0,dT,noise=noise,tnoise=tnoise) 
+    # additional test with varying frequency
+    _shape, _signal, _tseries = signal_freq_change_generator(Tfit+Tpred,Tpred,Tnoise,fs,dT)
+    # Combine the two sets of data
+    shape_control = np.concatenate((shape_control,_shape))
+    signal_input = np.concatenate((signal_input,_signal))
+    tseries = np.concatenate((tseries,_tseries))
+    
     # clip values of the signal_input
     signal_input = np.clip(signal_input,0.0,None)
     # Signals as scalable input handles
@@ -296,8 +327,8 @@ def run_shape_test(f0=0.05,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100
     #return states_train, teacher_train, new_esn
     
     # Characterize
-    pred_test, pred_error, tseries_test = characterize_network(new_esn, tseries_train, pred_train, [control_handle], 
-                                                               T0=Tfit,Tpred=Tpred+Tnoise)
+    pred_test, pred_error, tseries_test = characterize_network(new_esn, [control_handle], 
+                                                               T0=Tfit,Tpred=Tpred+len(fs)*Tpred)
     print('Prediction error:',pred_error)
     
     if generate_plots :
@@ -305,23 +336,17 @@ def run_shape_test(f0=0.05,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100
         if memory_variation > 0.0 :
             plot_memory_dist(new_esn,plotname)
             
-    # Evaluate noise
-    noise_mask = np.where(tseries_test>Tfit+Tpred)
-    mean_low, mean_high, var_low, var_high = evaluate_noise(tseries_test[noise_mask],
-                                                      pred_test[noise_mask],
-                                                      Tnoise,transient,plotname=plotname,
-                                                      makeplot=generate_plots)
-    
-    # Save only detected signal diff and average variance. 
-    avg_var = (var_high+var_low)/2
-    signal_diff = mean_high-mean_low            
-    # Deallocate the class instance
-    #del new_esn
+    signal_diff, avg_var = evaluate_freq_change_noise(tseries_test,pred_test,
+                                                            fs,Tfit,Tpred,Tnoise,
+                                                            plotname=plotname,
+                                                            makeplot=generate_plots)     
+
     if diagnostic :
         return train_error, pred_error, signal_diff, avg_var, new_esn, tseries_train, states_train, pred_train, tseries_test, pred_test, control_handle, signal_input
     else :
         return train_error, pred_error, signal_diff, avg_var #, new_esn, tseries_train, pred_train, tseries_test, pred_test, (t1_handle, t2_handle)
 
+#%% Automate the runs
 def generate_figurename(kwargs,suffix='') :
     filename = ''
     for k, v in kwargs.items():
@@ -330,13 +355,13 @@ def generate_figurename(kwargs,suffix='') :
     return filename
 
 def generate_filename(N,kwargs,suffix='.pkl') :
-    filename = f'shapedata_N{N}'
+    filename = f'shapefreqdata_N{N}'
     for k, v in kwargs.items():
         filename += '_' + k + str(v)
     
     return filename+suffix
 
-def repeat_runs(N, param_dict,save=True) :
+def repeat_runsOld(N, param_dict,save=True) :
     """Iterates through param dictionary, running batches of trials according to the param dictionary"""
       
     signal_diffs=np.zeros((N,param_dict['n']))
@@ -368,6 +393,39 @@ def repeat_runs(N, param_dict,save=True) :
             if save:
                 save_dataset((signal_diffs[:,i], noise_vars[:,i], train_errors[:,i], pred_errors[:,i]), N, kwargs)
     
+    return signal_diffs, noise_vars, train_errors, pred_errors
+
+def repeat_runs(N, param_dict,save=True) :
+    """Iterates through param dictionary, running batches of trials according to the param dictionary"""
+      
+    signal_diffs=np.zeros((N,param_dict['n']))
+    noise_vars=np.zeros((N,param_dict['n']))
+    train_errors=np.zeros((N,param_dict['n']))
+    pred_errors=np.zeros((N,param_dict['n']))
+    
+    # Set 
+    plt.ioff()
+    
+    print(param_dict)
+    kwargs = {}
+    for k, v in param_dict.items():
+        if k != 'n' and v[0] != None:
+            kwargs[k] = v[0]
+            
+    try :
+        # See if this has already been run
+        signal_diffs, noise_vars, train_errors, pred_errors = load_dataset(N,kwargs)
+        
+    except :
+        # Otherwise run it now
+        for m in range(N) :
+            plotname = generate_figurename(kwargs,suffix=f'_{m}')
+            train_errors[m], pred_errors[m], signal_diffs[m], noise_vars[m] = run_shape_test(plotname=plotname,**kwargs)
+            print('Status update, m =',m)
+    
+        if save:
+            save_dataset((signal_diffs, noise_vars, train_errors, pred_errors), N, kwargs)
+
     return signal_diffs, noise_vars, train_errors, pred_errors
 
 def save_dataset(arrays,N,kwargs):
@@ -404,7 +462,7 @@ Tnoise = 400
 T=Tpred+Tfit+Tnoise
 
 shape_control, signal_input, tseries = signal_shape_generator(T,Tnoise,f0,100,res=25,noise=0.3) 
-shape_control, signal_input, tseries = signal_freq_change_generator(0,1000,400,f0,0.1,5,100) 
+shape_control, signal_input, tseries = signal_freq_change_generator(0,1000,400,[0.05,0.2],200) 
 
 
 if True :
@@ -432,14 +490,9 @@ if True :
 
 #%% Setup a network that draw memory timescales from an uniform distribution
 #%%
-train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(f0=0.1,dT=100,generate_plots=True,memory_variation=0.9,memscale=2.0, diagnostic=True,dist='uniform',noise=0.0,fixImax=300)
+train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(memscale=10.0, memory_variation=0.0, diagnostic=True,fixImax=300,fs=[0.05,0.2])
 trial_nw.Imax 
-#%%
-train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(Nreservoir=100,f0=0.1,dT=200,memscale=10.0, diagnostic=True,noise=0.0,fixImax=300)
-trial_nw.Imax 
-#%%
-train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(Nreservoir=100,f0=0.1,dT=200,memscale=2.0, diagnostic=True,noise=0.0,fixImax=300)
-trial_nw.Imax 
+
 
 #%%
 
@@ -561,7 +614,7 @@ def plot_neat_timetrace(tseries_train,pred_train,tseries_test,pred_test,teacher_
     
     return fig, (ax1, ax2)
     
-#%%
+#%% Test the nice timetrace plot
 
 fig, ax = plot_neat_timetrace(tseries_train, pred_train, tseries_test, pred_test, teacher_handles)
 
@@ -584,27 +637,15 @@ fig, _, _ = plotter.bode_multi_plot(devices,indicate_freq=0.1)
 fig.show()
 
 #%%
-Ndf=1
-# Focus on a single df here
-Nreservoir=100
-
-#noise_vals = [0., 0.2, 0.4, 0.6]
-noise_vals = [0., 0.2]
-param_dicts  =[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[10.0]*Ndf,'f0':[0.1],'dT':[100],'noise':[noise]} for noise in noise_vals]
-param_dicts +=[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[10.0]*Ndf,'memory_variation':[0.9],'dist':['uniform'],'f0':[0.1],'dT':[100],'noise':[noise]} for noise in noise_vals]
-
 
 # Study the memscale effect on the predictabilty
-memscale_vals = [5,10,15]
-memscale_vals = [2,4,6,8,10]
-param_dicts =[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[mem]*Ndf,'f0':[0.1],'dT':[200],'noise':[noise_vals[0]],'fixImax':[300],'beta':[1e4]} for mem in memscale_vals]
-param_dicts +=[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[mem]*Ndf,'f0':[0.1],'dT':[200],'noise':[noise_vals[1]],'fixImax':[300],'beta':[1e4]} for mem in memscale_vals]
-#param_dicts +=[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[mem]*Ndf,'f0':[0.1],'dT':[200],'noise':[noise_vals[2]],'fixImax':[300],'beta':[1e4],'tnoise':[2000]} for mem in memscale_vals]
-#param_dicts +=[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[mem]*Ndf,'f0':[0.1],'dT':[200],'noise':[noise_vals[3]],'fixImax':[300],'beta':[1e4],'tnoise':[2000]} for mem in memscale_vals]
-param_dicts +=[{'n':Ndf,'Nreservoir':[Nreservoir]*Ndf,'memscale':[10.0]*Ndf,'memory_variation':[0.9],'dist':['uniform'],'f0':[0.1],'dT':[200],'noise':[noise],'fixImax':[300],'beta':[1e4]} for noise in noise_vals]
-           
-N=100 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
-N=20
+mem=10
+fs = [0.025, 0.05, 0.2, 0.4]
+Ndf = len(fs)+1
+param_dicts =[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs]}]
+param_dicts +=[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs],'memory_variation':[0.9]}]
+
+N=2
 
 signal_diffs = np.zeros((len(param_dicts),N,Ndf))
 noise_vars = np.zeros((len(param_dicts),N,Ndf))
