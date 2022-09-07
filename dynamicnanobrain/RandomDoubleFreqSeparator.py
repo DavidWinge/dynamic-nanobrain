@@ -21,7 +21,6 @@
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.interpolate import interp1d 
-from scipy.signal import square
 from pathlib import Path
 import pickle
 # modules specific to this project
@@ -41,118 +40,85 @@ rng = np.random.RandomState()
 PLOT_PATH= Path('../plots/esn/')
 DATA_PATH= Path('../data/esn/')
 
-
-#%% Signal generation block
-def signal_shape_generator(tend,ttest,f0,dT,tnoise=0,res=25,noise=0.0,amp_shift=0.4) :
+def freqeuncy_step_generator(tend,fmin,fmax,dT,res=10) :
     # determine the size of the sequence
-    dt = f0**-1/res
+    dt = fmax**-1/res
     N = int(tend/dt) # steps of total time interval
-    N1 = int((tend-ttest)/dt) # when testing starts
-    N3 = int((tnoise)/dt) # when noise starts, default at t=0
+    dN = int(dT/dt) # steps of average period
+    # From the info above we can setup our intervals
+    n_changepoints = int(N/dN)
+    changepoints = np.insert(np.sort(rng.randint(0,N,n_changepoints)),[0,n_changepoints],[0,N])
+    # From here on we use the pyESN example code, with some modifications
+    const_intervals = list(zip(changepoints,np.roll(changepoints,-1)))[:-1]
+    frequency_control = np.zeros((N,1))
+    for k, (t0,t1) in enumerate(const_intervals): # enumerate here
+        frequency_control[t0:t1] = fmin + (fmax-fmin)* (k % 2)
+    # run time update through a sine, while changing the freqeuncy
+    frequency_output = np.zeros((N,1))
+    z = 0
+    for i in range(N):
+        z = z + 2*np.pi*frequency_control[i]*dt
+        frequency_output[i] = (np.sin(z) + 1)/2
+        
+    tseries = np.arange(0,tend,step=dt)
+    if tseries.shape[0]>N :
+        tseries = tseries[:N] 
+    
+    return frequency_control,frequency_output,tseries
+
+def freqeuncy_signal_generator(tend,tnoise,fmin,fmax,dT,res=10,center_end_pulse=False,noise=0.0) :
+    # determine the size of the sequence
+    dt = fmax**-1/res
+    N = int(tend/dt) # steps of total time interval
+    N1 = int((tend-tnoise)/dt) 
     dN = int(dT/dt) # steps of average period
     # From the info above we can setup our intervals
     n_changepoints = int(N1/dN)
     changepoints = np.insert(np.sort(rng.randint(0,N1,n_changepoints)),[0,n_changepoints],[0,N1])
     # From here on we use the pyESN example code, with some modifications
     const_intervals = list(zip(changepoints,np.roll(changepoints,-1)))[:-1]
-    # Generate the two functions that we switch between
-    tau_end = tend*f0*2*np.pi
-    tau = np.linspace(0,tau_end,num=N).reshape((N,1))
-    square_shape = (square(tau)+1.0)/2 + amp_shift
-    sine_shape = (np.sin(tau)+1.)/2 + amp_shift
-    
-    # Adjust power level
-    square_shape /= 1.02 
-    
-    shape_control = np.zeros((N,1))
-    signal = np.zeros((N,1))
+    frequency_control = np.zeros((N,1))
     for k, (t0,t1) in enumerate(const_intervals): # enumerate here
-        shape_control[t0:t1] = k % 2
-        signal[t0:t1] = (k % 2) * square_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
-  
-    # Add the part where we diagnose the signal
-    N2 = int((N+N1)/2)
-    shape_control[N1:N2] = 0.0
-    shape_control[N2:] = 1.0
-    signal[N1:N2] = sine_shape[N1:N2]
-    signal[N2:] = square_shape[N2:]
-    
-    # Corresponding time vector
+        frequency_control[t0:t1] = fmin + (fmax-fmin)* (k % 2)
+    # Add special part to characterize noise
+    N2half = int((N+N1)/2)
+    if center_end_pulse :
+        Nquarter = int((N-N1)/4)
+        frequency_control[N1:] = fmin
+        frequency_control[N2half-Nquarter+1:N2half+Nquarter+1] = fmax
+    else :
+        frequency_control[N1:N2half] = fmin
+        frequency_control[N2half:] = fmax
+    # run time update through a sine, while changing the freqeuncy
+    frequency_output = np.zeros((N,1))
+    z = 0
+    for i in range(N):
+        z = z + 2*np.pi*frequency_control[i]*dt
+        frequency_output[i] = (np.sin(z) + 1)/2
+
     tseries = np.arange(0,tend,step=dt)
     if tseries.shape[0]>N :
         tseries = tseries[:N] 
+    
     # Add some noise here
-    input_noise = np.zeros_like(signal)
+    input_noise = np.zeros_like(frequency_output)
     if noise > 0. :
-        input_noise[N3:] = np.random.normal(scale=noise,size=(N-N3,1))
-        
-    return shape_control,signal+input_noise,tseries
-
-def signal_freq_change_generator(tstart,tlength,ttest,fs,dT,tnoise=0,res=25,noise=0.0,amp_shift=0.4) :
-    # For all frequencies, build a set of signals that we simply concatenate in the end
-    signals = {}
-    shape_controls = {}
-    tseriess = {}
-    for m,f in enumerate(fs) :
-        # Determine the size of the sequency
-        dt = f**-1/res
-        N = int(tlength/dt) # steps of each time interval
-        N1 = int((tlength-ttest)/dt) # when testing starts
-        dN = int(dT/dt) # steps of average period
-        # From the info above we can setup our intervals
-        n_changepoints = int(N1/dN)
-        changepoints = np.insert(np.sort(rng.randint(0,N1,n_changepoints)),[0,n_changepoints],[0,N1])
-        # From here on we use the pyESN example code, with some modifications
-        const_intervals = list(zip(changepoints,np.roll(changepoints,-1)))[:-1]
-        # Generate the two functions that we switch between
+        input_noise = np.random.normal(scale=noise,size=(N,1))
     
-        tau_end = tlength*f*2*np.pi
-        tau = np.linspace(0,tau_end,num=N).reshape((N,1))
-        square_shape = (square(tau)+1.0)/2 + amp_shift
-        sine_shape = (np.sin(tau)+1.)/2 + amp_shift
-
-        # Adjust power level
-        square_shape /= 1.02 
-        
-        shape_control = np.zeros((N,1))
-        signal = np.zeros((N,1))
-        for k, (t0,t1) in enumerate(const_intervals): # enumerate here
-            shape_control[t0:t1] = k % 2
-            signal[t0:t1] = (k % 2) * square_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
-      
-        # Add the part where we diagnose the signal
-        N2 = int((N+N1)/2)
-        shape_control[N1:N2] = 0.0
-        shape_control[N2:] = 1.0
-        signal[N1:N2] = sine_shape[N1:N2]
-        signal[N2:] = square_shape[N2:]
-        
-        # Corresponding time vector
-        tseries = np.arange(0,tlength,step=dt)
-        if tseries.shape[0]>N :
-            tseries = tseries[:N] 
-        # Add some noise here
-        if noise > 0. :
-            input_noise = np.random.normal(scale=noise,size=(N,1))    
-            signals[m] = signal + input_noise
-        else :
-            signals[m] = signal
-            
-        shape_controls[m] = shape_control
-        tseriess[m] = tseries + tstart + m*tlength
-
-    # Now concatenate the stuff
-    shape_control = np.concatenate(tuple(shape_controls.values()))
-    signal = np.concatenate(tuple(signals.values()))
-    tseries = np.concatenate(tuple(tseriess.values()))
     
-    return shape_control, signal, tseries
-   
-#%% Methods to run a single simualtion             
-def train_network(network,teacher_signal,Tfit=300,beta=10) :
+    return frequency_control,frequency_output+input_noise,tseries
+
+def normalize_control(signal,new_max=0.9,new_min=0.1) :
+    _min = signal.min()
+    _max = signal.max()
+    k = (new_max-new_min)/(_max-_min)
+    m = new_max - k*_max
+    return signal*k + m
+
+def train_network(network,teacher_signal,Tfit=300,beta=0.1) :
     
     # Harvest states
-    tseries_train, states_train, _ = network.harvest_states(Tfit,teacher_forcing=False)
+    tseries_train, states_train, _, tend = network.harvest_states(Tfit,teacher_forcing=False)
 
     teacher_train = np.zeros((len(tseries_train),len(teacher_signal)))
     for k in range(0,len(teacher_signal)) :
@@ -160,9 +126,10 @@ def train_network(network,teacher_signal,Tfit=300,beta=10) :
     
     pred_train, train_error = network.fit(states_train,teacher_train,beta)
     
-    return pred_train, train_error, tseries_train, states_train
+    return pred_train, train_error, tseries_train, states_train, tend
 
-def characterize_network(network, teacher_signal, T0=300, Tpred=300) :
+def characterize_network(network, tseries_train, pred_train, 
+                         teacher_signal, T0=300, Tpred=300) :
     
     tseries_test, pred_test, movie_series, plot_series = network.predict(T0,T0+Tpred,output_all=True)
     # Get the target signal
@@ -173,35 +140,10 @@ def characterize_network(network, teacher_signal, T0=300, Tpred=300) :
     pred_error = np.sqrt(np.mean((pred_test - teacher_test)**2))/network.Imax
     
     return pred_test, pred_error, tseries_test
-
-def evaluate_freq_change_noise(tseries_test,pred_test,fs,Tfit,Tpred,Tnoise,
-                               transient=10,plotname='freq_change_test',makeplot=False) :
-    signal_diff_l = []
-    avg_var_l = []
+                
+def evaluate_noise(tseries_test, pred_test, Tnoise,transient=10) :
     
-    for k,f in enumerate([0]+fs) : # Add [0] to list to cover also f0 SNR
-        # Pick out the relevant time series
-        t2 = Tfit+Tpred*(k+1)
-        t1 = t2-Tnoise
-        N1 = np.flatnonzero(tseries_test>t1)[0]
-        try :
-            N2 = np.flatnonzero(tseries_test>t2)[0]
-        except IndexError :
-            # throws an error if there is no such element, i.e. vector ends
-            N2 = -1
-        # Evaluate noise according to previous procedure
-        mean_low, mean_high, var_low,var_high = evaluate_noise(tseries_test[N1:N2],
-                                                               pred_test[N1:N2],
-                                                               plotname=plotname+str(k),
-                                                               makeplot=makeplot)
-        signal_diff_l.append(max(mean_high-mean_low,0))
-        avg_var_l.append((var_high+var_low)/2)
-     
-    return signal_diff_l, avg_var_l
-
-def evaluate_noise(tseries_test, pred_test, transient=10,
-                   plotname='noise',makeplot=False) :
-       
+    
     transN = np.flatnonzero(tseries_test>tseries_test[0]+transient)[0]
     N=len(tseries_test)
     M=int(N/2)
@@ -211,42 +153,97 @@ def evaluate_noise(tseries_test, pred_test, transient=10,
     mean_high = np.mean(pred_test[M+transN:])
     var_high = np.var(pred_test[M+transN:])
     
-    if makeplot  :
-        fig, ax1 = plt.subplots()
+    s_diff_sq = (mean_high-mean_low)**2#/max(var_high,var_low)
+    
+    return s_diff_sq, max(var_high,var_low)
 
-        ax1.plot(tseries_test,pred_test)
-        ax1.plot(tseries_test[transN:M],mean_low*np.ones_like(tseries_test[transN:M]),'r--')
-        ax1.plot(tseries_test[M+transN:],mean_high*np.ones_like(tseries_test[M+transN:]),'r--')
- 
-        ax1.set_xlabel('Time (ns)')
+def evaluate_double_noise(tseries_test, pred_test, Tnoise,transient=10,
+                          plotname='noise',makeplot=False) :
+    
+    transN = np.flatnonzero(tseries_test>tseries_test[0]+transient)[0]
+    N=len(tseries_test)
+    M=int(N/2)
+    Q=int(N/4)
+
+    # For the two parts of the signal, quantify the mean and variance
+    mean_low = np.zeros(2)
+    mean_high = np.zeros(2)
+    var_low = np.zeros(2)
+    var_high = np.zeros(2)
+    
+    k=0 # Quickly oscillating signal
+    mean_low[k] = np.mean(pred_test[transN:M,k])
+    var_low[k] = np.var(pred_test[transN:M,k])
+    mean_high[k] = np.mean(pred_test[M+transN:,k])
+    var_high[k] = np.var(pred_test[M+transN:,k])
+    
+    k=1 # Slowly oscillating signal
+    low_signal = np.concatenate((pred_test[transN:M-Q,k], pred_test[M+Q+transN:,k]),axis=0)
+    mean_low[k] = np.mean(low_signal)
+    var_low[k] = np.var(low_signal)
+    mean_high[k] = np.mean(pred_test[M-Q+transN:M+Q,k])
+    var_high[k] = np.var(pred_test[M-Q+transN:M+Q,k])
+   
+    if makeplot  :
+        fig, (ax1, ax2) = plt.subplots(2,1,sharex=True)
+        k=0
+        ax1.plot(tseries_test[:],pred_test[:,k])
+        ax1.plot(tseries_test[transN:M],mean_low[k]*np.ones_like(tseries_test[transN:M]),'r--')
+        ax1.plot(tseries_test[M+transN:],mean_high[k]*np.ones_like(tseries_test[M+transN:]),'r--')
+        k=1
+        ax2.plot(tseries_test[:],pred_test[:,k])
+        # low part (start and end)
+        ax2.plot(tseries_test[transN:M-Q],mean_low[k]*np.ones_like(tseries_test[transN:M-Q]),'r--')
+        ax2.plot(tseries_test[M+Q+transN:],mean_low[k]*np.ones_like(tseries_test[M+Q+transN:]),'r--')
+        # high part (middle)
+        ax2.plot(tseries_test[M-Q+transN:M+Q],mean_high[k]*np.ones_like(tseries_test[M-Q+transN:M+Q]),'r--')
+            
+        ax2.set_xlabel('Time (ns)')
+        ax2.set_ylabel('Output signal (nA)')
         ax1.set_ylabel('Output signal (nA)')
-        ax1.set_ylim(pred_test[:,0].min()-25,pred_test[:,0].max()+25)
-        plotter.save_plot(fig,'noise'+plotname,PLOT_PATH)
-        plt.close(fig)
+        ax1.set_ylim(0,pred_test[:,0].max()+25)
+        ax2.set_ylim(0,pred_test[:,1].max()+25)
+        plotter.save_plot(fig,'noise_'+plotname,PLOT_PATH)
         
     return mean_low, mean_high, var_low,var_high
 
-def plot_timetrace(tseries_train,pred_train,tseries_test=None,pred_test=None,teacher_handle=None,
-                   plotname='trace') :
+    #return s_diff_sq, max(var_high,var_low)
+
+def plot_timetrace(tseries_train,pred_train,tseries_test,pred_test,teacher_handle,
+                   f1,f2,plotname='timetrace') :
     
-    fig, ax1 = plt.subplots()
+    fig, (ax1, ax2) = plt.subplots(2,1,sharex=True)
     
-    ax1.plot(tseries_train[:],pred_train[:,0])
-    ax1.plot(tseries_train,teacher_handle[0](tseries_train),'--')
-    if tseries_test is not None :
-        ax1.plot(tseries_test[:],pred_test[:,0])
-        ax1.plot(tseries_test,teacher_handle[0](tseries_test),'--')
+    teacher_series = np.zeros((tseries_test.shape[0],2))
+    teacher_series[:,0]=np.squeeze(teacher_handle[0](tseries_test))
+    teacher_series[:,1]=np.squeeze(teacher_handle[1](tseries_test))
+    
+    ax1.plot(tseries_train[:],pred_train[:,0],linewidth=0.5)
+    ax1.plot(tseries_train,teacher_handle[0](tseries_train),'--',linewidth=0.5)
+
+    ax1.plot(tseries_test[:],pred_test[:,0],linewidth=0.5)
+    ax1.plot(tseries_test,teacher_series[:,0],'--',linewidth=0.5)
         
-
-    ax1.set_xlabel('Time (ns)')
-
+    ax2.plot(tseries_train[:],pred_train[:,1],linewidth=0.5)
+    ax2.plot(tseries_train,teacher_handle[1](tseries_train),'--',linewidth=0.5)
+    
+    ax2.plot(tseries_test[:],pred_test[:,1],linewidth=0.5)
+    ax2.plot(tseries_test,teacher_series[:,1],'--',linewidth=0.5)
+        
+    ax2.set_xlabel('Time (ns)')
+    ax2.set_ylabel('Output signal (nA)')
     ax1.set_ylabel('Output signal (nA)')
-    ax1.set_ylim(0,pred_test[:,0].max()+25)
+    ax1.set_ylim(0,teacher_series[:,0].max()+25)
+    ax2.set_ylim(0,teacher_series[:,1].max()+25)
+    ax1.set_title(f'f1min={f1:.2f} GHz')
+    ax2.set_title(f'f2min={f2:.2f} GHz')
     
-    plotter.save_plot(fig,'trace_'+plotname,PLOT_PATH)
-    plt.close(fig)
+    plotter.save_plot(fig,'timetrace_'+plotname,PLOT_PATH)
+    #plt.close()
     
-    return fig, ax1
+    return fig, (ax1, ax2)
+
+
     
 def plot_memory_dist(network,plotname) :
     """ Sample the RC constant for the memory storage only."""
@@ -258,16 +255,25 @@ def plot_memory_dist(network,plotname) :
     ax.set_xlabel('Memory timescale (ns)')
     ax.set_ylabel('Occurance')
     plotter.save_plot(fig,'memorydist_'+plotname,PLOT_PATH)
-    plt.close(fig)
+      
+def normalize(x,mean=0.5,amplitude=0.5,tiny=1e-15):
+    unscaled_delta = x.max()-x.min()
+    unscaled_mean = (x.max()+x.min())/2
+    # Shift to midpoint zero
+    x -= unscaled_mean
+    x *= 2*amplitude/unscaled_delta
+    x += mean
+    return x+tiny
     
- 
-def run_shape_test(f0=0.1,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,sparsity=10,
-             transient=0,plotname='shapefreqtest',generate_plots=True,seed=None,noise=0.,
-             spectral_radius=0.6,input_scaling=0.8,bias_scaling=0.1,diagnostic=False,
-             teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='uniform',
-             fixImax=None,beta=1e4,tnoise=0,fs=[]) :
+def run_double_test(fmin=0.02,fmax=0.2,mod=0.5,dT=100,Tfit=2000,Tpred=1000,Tnoise=1000,Nreservoir=100,sparsity=10,
+             transient=0,plotname='double_test',generate_plots=True,seed=None,noise=0.,
+             spectral_radius=0.9,input_scaling=0.8,bias_scaling=0.1,diagnostic=False,
+             teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='uniform',beta=0.1) :
 
-   # Specify device, start with the 1 ns device that we will scale
+    # Here we draw two frequencies at random
+    f1min, f2min = rng.rand(2)*(fmax-fmin) + fmin
+
+    # Specify device, start with the 1 ns device that we will scale
     propagator = physics.Device('../parameters/device_parameters_1ns.txt')
     # Scale the memory unit explicitly
     R_ref = propagator.p_dict['Rstore']
@@ -282,71 +288,86 @@ def run_shape_test(f0=0.1,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,
                             bias_scaling,
                             teacher_scaling, 
                             feedback=False,
-                            Noutput=1)
+                            Noutput=2)
     
     if memory_variation > 0.0 :
         new_esn.randomize_memory(memory_variation,dist)
         #plot_memory_dist(new_esn)
         
-    # input signal is a varying sine/square pulse
-    shape_control, signal_input, tseries = signal_shape_generator(Tfit+Tpred,Tnoise,f0,dT,noise=noise,tnoise=tnoise) 
-    # additional test with varying frequency
-    _shape, _signal, _tseries = signal_freq_change_generator(Tfit+Tpred,Tpred,Tnoise,fs,dT)
-    # Combine the two sets of data
-    shape_control = np.concatenate((shape_control,_shape))
-    signal_input = np.concatenate((signal_input,_signal))
-    tseries = np.concatenate((tseries,_tseries))
-    
-    # clip values of the signal_input
-    signal_input = np.clip(signal_input,0.0,None)
+    # input signal is steps in low and high frequency, output is FM signal
+    f1max=f1min*(mod+1)
+    f2max=f2min*(mod+1)
+    f1_control, f1_output, tseries = freqeuncy_signal_generator(Tfit+Tpred+Tnoise,Tnoise,f1min,f1max,dT,noise=noise) 
+    f2_control, f2_output, t2series = freqeuncy_signal_generator(Tfit+Tpred+Tnoise,Tnoise,f2min,f2max,dT,center_end_pulse=True) 
+ 
+    # Construct composite frequency signal
+    f2_interp1d = interp1d(t2series,f2_output,axis=0,fill_value=f2_output[-1],bounds_error=False)
+    f_output = f1_output + f2_interp1d(tseries)
+    f_output = np.clip(f_output,0.,None)
+    #f2_control *= f1min/f2min # scale to have similar units for output
+
+    # normalize control in order to have it between 0 and 1
+    f1_control = normalize(f1_control)
+    f2_control = normalize(f2_control)
+
     # Signals as scalable input handles
     # Use interpolation to get function handles from these data
-    def control_signal(signal_scale) :
-        handle = interp1d(tseries,shape_control*signal_scale,axis=0,fill_value=signal_scale,bounds_error=False)
+    def t1_signal(signal_scale) :
+        handle = interp1d(tseries,f1_control*signal_scale,axis=0,fill_value=f1_control[-1]*signal_scale,bounds_error=False)
         return handle 
-        
+    
+    def t2_signal(signal_scale) :
+        handle = interp1d(t2series,f2_control*signal_scale,axis=0,fill_value=f2_control[-1]*signal_scale,bounds_error=False)
+        return handle 
+    
     def input_signal(signal_scale) :
-        handle = interp1d(tseries,signal_input*signal_scale,axis=0)  
+        handle = interp1d(tseries,f_output*signal_scale,axis=0)  
         return handle
 
     def bias_signal(signal_scale) :
         return lambda t : signal_scale
     
     # Specify explicit signals by handle
-    new_esn.specify_inputs(input_signal,bias_signal,control_signal,fixImax=fixImax)
+    new_esn.specify_inputs(input_signal,bias_signal,t1_signal)
     
     # Generate the target signal
-    if fixImax is None :
-        control_handle = control_signal(new_esn.Imax*new_esn.teacher_scaling)
-    else :
-        control_handle = control_signal(fixImax*new_esn.teacher_scaling)
-
+    t1_handle = t1_signal(new_esn.Imax*new_esn.teacher_scaling)
+    # Generate the target signal
+    t2_handle = t2_signal(new_esn.Imax*new_esn.teacher_scaling)
+    #teacher_series = teacher_handle(tseries)
+    
     # Train
-    pred_train, train_error, tseries_train, states_train = train_network(new_esn,[control_handle],Tfit=Tfit,beta=beta)
+    pred_train, train_error, tseries_train, states_train, tend = train_network(new_esn,[t1_handle,t2_handle],Tfit=Tfit,beta=beta)
     #states_train, teacher_train = train_network(new_esn,[t1_handle,t2_handle],Tfit=Tfit)
     #return states_train, teacher_train, new_esn
     
     # Characterize
-    pred_test, pred_error, tseries_test = characterize_network(new_esn, [control_handle], 
-                                                               T0=Tfit,Tpred=Tpred+len(fs)*Tpred)
+    pred_test, pred_error, tseries_test = characterize_network(new_esn, tseries_train, pred_train, [t1_handle, t2_handle], 
+                                                               T0=tend,Tpred=Tpred+Tnoise)
     print('Prediction error:',pred_error)
     
     if generate_plots :
-        plot_timetrace(tseries_train,pred_train,tseries_test,pred_test, [control_handle],plotname)
+        plot_timetrace(tseries_train,pred_train,tseries_test,pred_test, [t1_handle, t2_handle],f1min,f2min,plotname)
         if memory_variation > 0.0 :
             plot_memory_dist(new_esn,plotname)
             
-    signal_diff, avg_var = evaluate_freq_change_noise(tseries_test,pred_test,
-                                                            fs,Tfit,Tpred,Tnoise,
-                                                            plotname=plotname,
-                                                            makeplot=generate_plots)     
-
+    # Evaluate noise
+    noise_mask = np.where(tseries_test>Tfit+Tpred)
+    mean_low, mean_high, var_low, var_high = evaluate_double_noise(tseries_test[noise_mask],
+                                                      pred_test[noise_mask],
+                                                      Tnoise,transient,plotname=plotname,
+                                                      makeplot=generate_plots)
+    
+    # Save only detected signal diff and average variance. 
+    avg_var = (var_high+var_low)/2
+    signal_diffs = mean_high-mean_low            
+    # Deallocate the class instance
+    #del new_esn
     if diagnostic :
-        return train_error, pred_error, signal_diff, avg_var, new_esn, tseries_train, states_train, pred_train, tseries_test, pred_test, control_handle, signal_input
+        return train_error, pred_error, signal_diffs, avg_var, [f1min, f2min], new_esn, tseries_train, pred_train, tseries_test, pred_test, (t1_handle, t2_handle)    
     else :
-        return train_error, pred_error, signal_diff, avg_var #, new_esn, tseries_train, pred_train, tseries_test, pred_test, (t1_handle, t2_handle)
+        return train_error, pred_error, signal_diffs, avg_var, [f1min, f2min] #, new_esn, tseries_train, pred_train, tseries_test, pred_test, (t1_handle, t2_handle)
 
-#%% Automate the runs
 def generate_figurename(kwargs,suffix='') :
     filename = ''
     for k, v in kwargs.items():
@@ -355,19 +376,20 @@ def generate_figurename(kwargs,suffix='') :
     return filename
 
 def generate_filename(N,kwargs,suffix='.pkl') :
-    filename = f'shapefreqdata_N{N}'
+    filename = f'data_N{N}'
     for k, v in kwargs.items():
         filename += '_' + k + str(v)
     
     return filename+suffix
 
-def repeat_runsOld(N, param_dict,save=True) :
+def repeat_runs(N, param_dict,save=True) :
     """Iterates through param dictionary, running batches of trials according to the param dictionary"""
       
-    signal_diffs=np.zeros((N,param_dict['n']))
-    noise_vars=np.zeros((N,param_dict['n']))
+    signal_diffs=np.zeros((N,param_dict['n'],2))
+    noise_vars=np.zeros((N,param_dict['n'],2))
     train_errors=np.zeros((N,param_dict['n']))
     pred_errors=np.zeros((N,param_dict['n']))
+    rand_freq=np.zeros((N,param_dict['n'],2))
     
     # Set 
     plt.ioff()
@@ -381,52 +403,19 @@ def repeat_runsOld(N, param_dict,save=True) :
                 
         try :
             # See if this has already been run
-            signal_diffs[:,i], noise_vars[:,i], train_errors[:,i], pred_errors[:,i] = load_dataset(N,kwargs)
+            signal_diffs[:,i], noise_vars[:,i], train_errors[:,i], pred_errors[:,i], rand_freq[:,i] = load_dataset(N,kwargs)
             
         except :
             # Otherwise run it now
             for m in range(N) :
                 plotname = generate_figurename(kwargs,suffix=f'_{m}')
-                train_errors[m,i], pred_errors[m,i], signal_diffs[m,i], noise_vars[m,i] = run_shape_test(plotname=plotname,**kwargs)
+                train_errors[m,i], pred_errors[m,i], signal_diffs[m,i], noise_vars[m,i], rand_freq[m,i] = run_double_test(plotname=plotname,**kwargs)
                 print('Status update, m =',m)
         
             if save:
-                save_dataset((signal_diffs[:,i], noise_vars[:,i], train_errors[:,i], pred_errors[:,i]), N, kwargs)
+                save_dataset((signal_diffs[:,i], noise_vars[:,i], train_errors[:,i], pred_errors[:,i], rand_freq[:,i]), N, kwargs)
     
-    return signal_diffs, noise_vars, train_errors, pred_errors
-
-def repeat_runs(N, param_dict,save=True) :
-    """Iterates through param dictionary, running batches of trials according to the param dictionary"""
-      
-    signal_diffs=np.zeros((N,param_dict['n']))
-    noise_vars=np.zeros((N,param_dict['n']))
-    train_errors=np.zeros((N,param_dict['n']))
-    pred_errors=np.zeros((N,param_dict['n']))
-    
-    # Set 
-    plt.ioff()
-    
-    print(param_dict)
-    kwargs = {}
-    for k, v in param_dict.items():
-        if k != 'n' and v[0] != None:
-            kwargs[k] = v[0]
-            
-    try :
-        # See if this has already been run
-        signal_diffs, noise_vars, train_errors, pred_errors = load_dataset(N,kwargs)
-        
-    except :
-        # Otherwise run it now
-        for m in range(N) :
-            plotname = generate_figurename(kwargs,suffix=f'_{m}')
-            train_errors[m], pred_errors[m], signal_diffs[m], noise_vars[m] = run_shape_test(plotname=plotname,**kwargs)
-            print('Status update, m =',m)
-    
-        if save:
-            save_dataset((signal_diffs, noise_vars, train_errors, pred_errors), N, kwargs)
-
-    return signal_diffs, noise_vars, train_errors, pred_errors
+    return signal_diffs, noise_vars, train_errors, pred_errors, rand_freq
 
 def save_dataset(arrays,N,kwargs):
     filename = generate_filename(N,kwargs)
@@ -446,59 +435,93 @@ def load_dataset(N, kwargs):
         noise_vars = pickle.load(f)
         train_errors = pickle.load(f)
         pred_errors = pickle.load(f)
+        rand_freq = pickle.load(f)
         # now it's empty
     
-    return signal_diffs, noise_vars, train_errors, pred_errors
+    return signal_diffs, noise_vars, train_errors, pred_errors, rand_freq
    
 
 #%% START NEW DEVELOPMENT HERE
 
+#%% Bode plots of our related devices
+memscale_vals = [5]
+
+devices = {}
+for mem in memscale_vals :
+# Specify device, start with the 1 ns device that we will scale
+    devices[mem] = physics.Device('../parameters/device_parameters_1ns.txt')
+    # Scale the memory unit explicitly
+    R_ref = devices[mem].p_dict['Rstore']
+    C_ref = devices[mem].p_dict['Cstore']
+    devices[mem].set_parameter('Rstore',R_ref*(np.sqrt(mem)))
+    devices[mem].set_parameter('Cstore',C_ref*(np.sqrt(mem)))
+    
+fig, _, _ = plotter.bode_multi_plot(devices,indicate_freq=0.1)
+fig.show()
 # %% 
 # Plot the frequency control and periods together
-f0 = 0.1 # GHz
+fmin1 = 0.5 # GHz
+d1 = 0.25 # GHz
+fmin2 = 0.005 # GHz
+d2 = fmin2/2 # GHz
+ratio=fmin1/fmin2
 Tpred = 1000
-Tfit = 2000
-Tnoise = 400
+Tfit = 1000
+Tnoise = 1000
 T=Tpred+Tfit+Tnoise
 
-shape_control, signal_input, tseries = signal_shape_generator(T,Tnoise,f0,100,res=25,noise=0.3) 
-shape_control, signal_input, tseries = signal_freq_change_generator(0,1000,400,[0.05,0.2],200) 
-
+f1_control, f1_output, t1series = freqeuncy_signal_generator(T,Tnoise,fmin1,fmin1+d1,50) 
+f2_control, f2_output, t2series = freqeuncy_signal_generator(T,Tnoise,fmin2,fmin2+d2,200,center_end_pulse=True,res=50) 
 
 if True :
     Nmax = -1
-    xmax =5000 #ns
-    fig, axs = plt.subplots(2,1,sharex=True)
+    xmax =1000 #ns
+    fig, axs = plt.subplots(2,2)
 
     
-    axs[0].plot(tseries[:Nmax],shape_control[:Nmax])
-    axs[1].plot(tseries[:Nmax],signal_input[:Nmax])
-
+    axs[0,0].plot(t1series[:Nmax],f1_control[:Nmax])
+    axs[0,1].plot(t1series[:Nmax],f1_output[:Nmax])
+    axs[1,0].plot(t2series[:Nmax],ratio*f2_control[:Nmax])
+    axs[1,1].plot(t2series[:Nmax],f2_output[:Nmax])
     #ax2.plot(periods[:1000])
     
     for k, ax in enumerate(axs.flatten()):
         ax.set_xlim(0,xmax)
         ax.set_xlabel('Time (ns)')
         if k%2 == 0 :
-            ax.set_ylabel('Shape control (arb. units)')
+            ax.set_ylabel('Freqency control (arb. units)')
         else :
-            ax.set_ylabel('Signal input (nA)')
+            ax.set_ylabel('Frequency output (nA)')
     
-    plt.tight_layout()
     plt.show()
 
 
+#%% Combine the two signals into a composite one
+
+f2_interp1d = interp1d(t2series,f2_output,axis=0,fill_value=f2_output[-1],bounds_error=False)
+f_output = f1_output + f2_interp1d(t1series)
+
+Nmax = len(t1series)
+fig, axs = plt.subplots(3,1,sharex=True)
+
+axs[0].plot(t1series[:Nmax],f_output[:Nmax])
+axs[1].plot(t1series[:Nmax],f1_control[:Nmax])
+axs[2].plot(t2series[:Nmax],ratio*f2_control[:Nmax])
+ #ax2.plot(periods[:1000])
+axs[2].set_xlabel('Time (ns)')
+axs[1].set_ylabel('Fast control')
+axs[2].set_ylabel('Slow control')
+axs[0].set_ylabel('Frequency signal')
+axs[2].set_xlim(0,400) 
+plt.show()
+
 #%% Setup a network that draw memory timescales from an uniform distribution
-#%%
-train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(memscale=10.0, memory_variation=0.0, f0=0.05,diagnostic=True,fixImax=300,fs=[0.028,0.12,0.24])
-trial_nw.Imax 
-
-
-#%%
-
-fig, ax = plotter.sample_npseries(tseries_train,states_train, Nplots=3, overlay=teacher_handle(tseries_train),rolling_avg=True)
-fig.show()
-
+                                                                        
+train_error, pred_error, signal_diffs, noise_var, f1, f2, trial_nw, tseries_train, pred_train, tseries_test, pred_test, teacher_handles = run_double_test(Tfit=1000,Tpred=500,Tnoise=500,Nreservoir=100,fmin=0.02,fmax=0.2,dT=100,generate_plots=True,memory_variation=0.9,memscale=10.0,dist='uniform', diagnostic=True, beta=0.1)
+    
+#train_error, pred_error, signal_diffs, noise_var = run_double_test(Nreservoir=200,generate_plots=True,memory_variation=2,
+#                                                                   input_scaling=0.5)
+#states_train, teacher_train, my_esn = run_double_test(Tfit=T1,Tpred=T1,Tnoise=T1,generate_plots=True)
 #%% Look at the memory constants
 A = trial_nw.sample_A()
 
@@ -614,214 +637,80 @@ def plot_neat_timetrace(tseries_train,pred_train,tseries_test,pred_test,teacher_
     
     return fig, (ax1, ax2)
     
-#%% Test the nice timetrace plot
+#%%
 
 fig, ax = plot_neat_timetrace(tseries_train, pred_train, tseries_test, pred_test, teacher_handles)
 
 fig.show()
-
-#%% Bode plots of our related devices
-memscale_vals = [1,2,4,6,8,10]
-
-devices = {}
-for mem in memscale_vals :
-# Specify device, start with the 1 ns device that we will scale
-    devices[mem] = physics.Device('../parameters/device_parameters_1ns.txt')
-    # Scale the memory unit explicitly
-    R_ref = devices[mem].p_dict['Rstore']
-    C_ref = devices[mem].p_dict['Cstore']
-    devices[mem].set_parameter('Rstore',R_ref*(np.sqrt(mem)))
-    devices[mem].set_parameter('Cstore',C_ref*(np.sqrt(mem)))
-    
-fig, _, _ = plotter.bode_multi_plot(devices,indicate_freq=0.1)
-fig.show()
-
 #%%
-inv_gain, Imax = devices[1].inverse_gain_coefficient(devices[1].eta_ABC,1.2)
-unity_coeff = devices[1].unity_coupling_coefficient(devices[1].eta_ABC)
-#%%
+Ndf=1
+# Focus on a single df here
 
 # Study the memscale effect on the predictabilty
 mem=10
-fs = [0.028, 0.045, 0.24, 0.37]
-Ndf = len(fs)+1
-param_dicts =[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs]}]
-param_dicts +=[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs],'memory_variation':[0.9]}]
+param_dicts =[{'n':Ndf,'memscale':[mem]}]
+param_dicts +=[{'n':Ndf,'memscale':[mem],'memory_variation':[0.9]}]
 
-N=20
+N=100
 
-signal_diffs = np.zeros((len(param_dicts),N,Ndf))
-noise_vars = np.zeros((len(param_dicts),N,Ndf))
+signal_diffs = np.zeros((len(param_dicts),N,Ndf,2))
+noise_vars = np.zeros((len(param_dicts),N,Ndf,2))
 train_errors = np.zeros((len(param_dicts),N,Ndf))
 pred_errors = np.zeros((len(param_dicts),N,Ndf))
+rand_freq = np.zeros((len(param_dicts),N,Ndf,2))
 
 for k, param_dict in enumerate(param_dicts):    
-    signal_diffs[k], noise_vars[k], train_errors[k], pred_errors[k] = repeat_runs(N,param_dict)
+    signal_diffs[k], noise_vars[k], train_errors[k], pred_errors[k], rand_freq[k] = repeat_runs(N,param_dict)
     
-#%% Study reservoir size while penalizing overfitting
-Nreservoir = [10,20,40,80]
-Ndf = 1
-
-param_dicts  =[{'n':Ndf,'Nreservoir':[N]*Ndf,'memscale':[2.0]*Ndf,'f0':[0.1],'dT':[100],'noise':[0.0],'beta':[10000],'fixImax':[300]} for N in Nreservoir]
-param_dicts +=[{'n':Ndf,'Nreservoir':[N]*Ndf,'memscale':[10.0]*Ndf,'f0':[0.1],'dT':[100],'noise':[0.0],'beta':[10000],'fixImax':[300]} for N in Nreservoir]
-param_dicts +=[{'n':Ndf,'Nreservoir':[N]*Ndf,'memscale':[10.0]*Ndf,'memory_variation':[0.9],'f0':[0.1],'dT':[200],'noise':[0.0],'beta':[10000],'fixImax':[300],'dist':['uniform']} for N in Nreservoir]
-
-          
-N=20 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
-
-signal_diffs = np.zeros((len(param_dicts),N,Ndf))
-noise_vars = np.zeros((len(param_dicts),N,Ndf))
-train_errors = np.zeros((len(param_dicts),N,Ndf))
-pred_errors = np.zeros((len(param_dicts),N,Ndf))
-
-for k, param_dict in enumerate(param_dicts):    
-    signal_diffs[k], noise_vars[k], train_errors[k], pred_errors[k] = repeat_runs(N,param_dict)
-    
-
-#%% Plot SNR versus fs
+#%% Produce scatter plots with f1 and f2
 snr = signal_diffs/np.sqrt(noise_vars)
-
-signal_std = np.std(signal_diffs,axis=1)
-signal_mean = np.mean(signal_diffs,axis=1)
-
-snr_mean = np.mean(snr, axis=1)
-snr_std = np.std(snr, axis=1)
-f0 = 0.1
-xaxis_data = [f0] + fs
-plottitle = f'Generalizing, trained at {f0} GHz'
-
-fig, ax = plt.subplots()
-
-ax.errorbar(xaxis_data,np.squeeze(signal_mean)[0],np.squeeze(signal_std)[0],fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(xaxis_data,np.squeeze(signal_mean)[1],np.squeeze(signal_std)[1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-
-ax.grid(True)
-ax.legend()
-ax.set_xlabel('Frequency (GHz)')
-ax.set_ylabel('Signal (high-low)')
-ax.set_title(plottitle)
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-fig, ax = plt.subplots()
-
-ax.errorbar(xaxis_data,np.squeeze(snr_mean)[0],np.squeeze(snr_std)[0],fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(xaxis_data,np.squeeze(snr_mean)[1],np.squeeze(snr_std)[1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-
-ax.set_xlabel('Frequency (GHz)')
-ax.set_ylabel('SNR (mean/std. dev.)')
-ax.set_title(plottitle)
-ax.legend()
-ax.grid(True)
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-#%% Plot the SNR as a function of memory variation
-snr = signal_diffs/np.sqrt(noise_vars)
-
-std_vs_mem = np.std(signal_diffs,axis=1)
-mean_vs_mem = np.mean(signal_diffs,axis=1)
-
-snr_mean = np.mean(snr, axis=1)
-snr_std = np.std(snr, axis=1)
-
-xaxis_data = noise_vals*3
-M = len(noise_vals)
-
-fig, ax = plt.subplots()
-
-ax.errorbar(xaxis_data[:M],np.squeeze(mean_vs_mem)[:M],np.squeeze(std_vs_mem)[:M],fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(xaxis_data[M:M+1],np.squeeze(mean_vs_mem)[M:M+1],np.squeeze(std_vs_mem)[M:M+1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-ax.errorbar(xaxis_data[M+1:],np.squeeze(mean_vs_mem)[M+1:],np.squeeze(std_vs_mem)[M+1:],fmt='s',capsize=3.0,label=r'single-$\tau$:5 ns')
-
-
-ax.set_xlabel('Noise fraction')
-ax.set_ylabel('Signal (high-low)')
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-fig, ax = plt.subplots()
-
-ax.errorbar(xaxis_data[:M],np.squeeze(snr_mean)[:M],np.squeeze(snr_std)[:M],fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(xaxis_data[M:M+1],np.squeeze(snr_mean)[M:M+1],np.squeeze(snr_std)[M:M+1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-ax.errorbar(xaxis_data[M+1:],np.squeeze(snr_mean)[M+1:],np.squeeze(snr_std)[M+1:],fmt='s',capsize=3.0,label=r'single-$\tau$:5 ns')
-
-ax.set_xlabel('Noise fraction')
-ax.set_ylabel('SNR (mean/std. dev.)')
-ax.legend()
-ax.grid(True)
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-#%% Plot the SNR as a function of memory variation
-snr = signal_diffs/np.sqrt(noise_vars)
-
-# Negative signals doesn't count
 snr = np.clip(snr,0,None)
 
-std_vs_mem = np.std(signal_diffs,axis=1)
-mean_vs_mem = np.mean(signal_diffs,axis=1)
+titles = ['Fixed memory','Distributed memory']
 
+for k in range(rand_freq.shape[0]) :
+        
+    f1 = rand_freq[k,:,0,0]
+    f2 = rand_freq[k,:,0,1]
+    ff = np.linspace(f1.min(),f1.max())
+    
+    vals = np.where(snr[k,:,0,0]<snr[k,:,0,1],snr[k,:,0,0],snr[k,:,0,1])
+    
+    
+    fig, ax = plt.subplots()
+    
+    ax.plot(ff,ff,'k--')
+    im = ax.scatter(f1,f2,c=vals)
+    plt.colorbar(im,ax=ax,label='min. SNR (f1 vs f2)')
+    ax.set_xlabel('f1')
+    ax.set_xlabel('f2')
+    ax.set_title(titles[k])
+    
+plt.show()
+
+#%% Statistics of the SNR
 snr_mean = np.mean(snr, axis=1)
 snr_std = np.std(snr, axis=1)
 
-noise_std_mean = np.mean(np.sqrt(noise_vars),axis=1)
-
-xaxis_data = Nreservoir
-M = len(xaxis_data)
+avg_snr = np.mean(snr_mean,axis=2)
+avg_std = np.mean(snr_std,axis=2)
 
 fig, ax = plt.subplots()
 
-ax.errorbar(xaxis_data[:],np.squeeze(mean_vs_mem)[:M],np.squeeze(std_vs_mem)[:M],fmt='s',capsize=3.0,label=r'single-$\tau$:2 ns')
-ax.errorbar(xaxis_data[:],np.squeeze(mean_vs_mem)[M:M+M],np.squeeze(std_vs_mem)[M:M+M],fmt='s',capsize=3.0,label=r'single-$\tau$:10 ns')
-ax.errorbar(xaxis_data[:],np.squeeze(mean_vs_mem)[M+M:],np.squeeze(std_vs_mem)[M+M:],fmt='^',capsize=3.0,label=r'dist-$\tau$:10 ns')
+ax.errorbar([1],np.squeeze(avg_snr)[0],np.squeeze(avg_std)[0],fmt='s',capsize=3.0)
+ax.errorbar([2],np.squeeze(avg_snr)[1],np.squeeze(avg_std)[1],fmt='^',capsize=3.0)
 
-
-ax.set_xlabel('Reservoir size')
-ax.set_ylabel('Signal (high-low)')
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-fig, ax = plt.subplots()
-
-ax.errorbar(xaxis_data[:],np.squeeze(snr_mean)[:M],np.squeeze(snr_std)[:M],fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(xaxis_data[:],np.squeeze(snr_mean)[M:M+M],np.squeeze(snr_std)[M:M+M],fmt='s',capsize=3.0,label=r'single-$\tau$:10 ns')
-ax.errorbar(xaxis_data[:],np.squeeze(snr_mean)[M+M:],np.squeeze(snr_std)[M+M:],fmt='^',capsize=3.0,label=r'dist-$\tau$:10 ns')
-
-ax.set_xlabel('Reservoir size')
+#ax.set_xlabel('Mean of memory dist.')
 ax.set_ylabel('SNR (mean/std. dev.)')
-ax.legend()
+#ax.set_xticklabels(['','20%', '10%', 'No noise','20%', '10%', 'No noise'])
+#ax.text(1, 5, r'Single-$\tau$')
+#ax.text(3.5, 5, r'Uniform-$\tau$')
 ax.grid(True)
-#ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-fig, ax = plt.subplots()
-
-ax.plot(xaxis_data[:],np.squeeze(noise_std_mean)[:M],'s',markersize=3.0,label=r'single-$\tau$')
-ax.plot(xaxis_data[:],np.squeeze(noise_std_mean)[M:M+M],'s',markersize=3.0,label=r'single-$\tau$:10 ns')
-ax.plot(xaxis_data[:],np.squeeze(noise_std_mean)[M+M:],'^',markersize=3.0,label=r'dist-$\tau$:10 ns')
-
-ax.set_xlabel('Reservoir size')
-ax.set_ylabel('Noise (mean std. dev.)')
 ax.legend()
-ax.grid(True)
 #ax.set_ylim(0,12)
-#ax.set_xlim(-0.05,0.55)
-
-fig.show()
-
-#%% Plot the SNR as a function of memscale
+ax.set_xlim(0.5,2.5)
+plt.show()
+#%% Plot the SNR as a function of memory variation
 snr = signal_diffs/np.sqrt(noise_vars)
 
 std_vs_mem = np.std(signal_diffs,axis=1)
@@ -830,66 +719,35 @@ mean_vs_mem = np.mean(signal_diffs,axis=1)
 snr_mean = np.mean(snr, axis=1)
 snr_std = np.std(snr, axis=1)
 
-noise_std_mean = np.mean(np.sqrt(noise_vars),axis=1)
-
-xaxis_data = memscale_vals
-M = len(xaxis_data)
-
 fig, ax = plt.subplots()
 
-ax.errorbar(xaxis_data,np.squeeze(mean_vs_mem[:M]),np.squeeze(std_vs_mem[:M]),fmt='s',capsize=3.0,label=r'single-$\tau$')
-ax.errorbar(10,np.squeeze(mean_vs_mem)[-1],np.squeeze(std_vs_mem)[-1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-#ax.errorbar(xaxis_data[M:M+1],np.squeeze(mean_vs_mem)[M:M+1],np.squeeze(std_vs_mem)[M:M+1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-#ax.errorbar(xaxis_data[M+1:],np.squeeze(mean_vs_mem)[M+1:],np.squeeze(std_vs_mem)[M+1:],fmt='s',capsize=3.0,label=r'single-$\tau$:5 ns')
+ax.errorbar(memscale_vals[:],np.squeeze(mean_vs_mem)[:,0],np.squeeze(std_vs_mem)[:,0],fmt='s',capsize=3.0)
+ax.errorbar(memscale_vals[:],np.squeeze(mean_vs_mem)[:,1],np.squeeze(std_vs_mem)[:,1],fmt='^',capsize=3.0)
 
-
-ax.set_xlabel('Memory timescale (ns)')
+ax.set_xlabel('Mean of memory dist.')
 ax.set_ylabel('Signal (high-low)')
 #ax.set_ylim(0,12)
 #ax.set_xlim(-0.05,0.55)
 
 fig.show()
 
-fig, ax = plt.subplots(len(noise_vals),1,sharex=True)
-M = len(noise_vals)*len(memscale_vals)
-
-for k, noise in enumerate(noise_vals) :
-    selection = range(k*len(memscale_vals),(k+1)*len(memscale_vals))
-    ax[k].errorbar(xaxis_data,np.squeeze(snr_mean[selection]),np.squeeze(snr_std[selection]),fmt='s',capsize=3.0,label=r'single-$\tau$-'+f'noise={noise}')
-    ax[k].errorbar(10,np.squeeze(snr_mean[M+k]),np.squeeze(snr_std[M+k]),fmt='^',capsize=3.0,label=r'dist-$\tau$-'+f'noise={noise}')
-#ax.errorbar(xaxis_data[M:M+1],np.squeeze(snr_mean)[M:M+1],np.squeeze(snr_std)[M:M+1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-#ax.errorbar(xaxis_data[M+1:],np.squeeze(snr_mean)[M+1:],np.squeeze(snr_std)[M+1:],fmt='s',capsize=3.0,label=r'single-$\tau$:5 ns')
-    ax[k].set_ylabel('SNR (mean/std. dev.)')
-    ax[k].legend()
-    ax[k].grid(True)
-    ax[k].set_ylim(0,None)
-ax[k].set_xlabel('Memory timescale (ns)')
-
-fig.show()
-
 fig, ax = plt.subplots()
-M = len(noise_vals)*len(memscale_vals)
 
-xaxis_data = noise_vals
-for k, mem in enumerate(memscale_vals) :
-    selection = np.arange(k,M,step=len(memscale_vals))
-    ax.errorbar(xaxis_data,np.squeeze(snr_mean[selection]),np.squeeze(snr_std[selection]),fmt='-s',capsize=3.0,label=r'single-$\tau$-'+f'{mem} ns')
-    
-      
-ax.errorbar(noise_vals,np.squeeze(snr_mean[M:]),np.squeeze(snr_std[M:]),fmt='-^',capsize=3.0,label=r'dist-$\tau$-'+f'{mem} ns')
-#ax.errorbar(xaxis_data[M:M+1],np.squeeze(snr_mean)[M:M+1],np.squeeze(snr_std)[M:M+1],fmt='^',capsize=3.0,label=r'dist-$\tau$')
-#ax.errorbar(xaxis_data[M+1:],np.squeeze(snr_mean)[M+1:],np.squeeze(snr_std)[M+1:],fmt='s',capsize=3.0,label=r'single-$\tau$:5 ns')
+ax.errorbar(memscale_vals[:],np.squeeze(snr_mean)[:,0],np.squeeze(snr_std)[:,0],fmt='s',capsize=3.0,label='fast')
+ax.errorbar(memscale_vals[:],np.squeeze(snr_mean)[:,1],np.squeeze(snr_std)[:,1],fmt='^',capsize=3.0,label='slow')
+
+#ax.set_xlabel('Mean of memory dist.')
 ax.set_ylabel('SNR (mean/std. dev.)')
-ax.legend()
+ax.set_xticklabels(['','20%', '10%', 'No noise','20%', '10%', 'No noise'])
+ax.text(1, 5, r'Single-$\tau$')
+ax.text(3.5, 5, r'Uniform-$\tau$')
 ax.grid(True)
-ax.set_ylim(0,None)
-ax.set_xlim(-0.1,0.7)
-  
-ax.set_xlabel('Noise level (ns)')
-
+ax.legend()
+#ax.set_ylim(0,12)
 #ax.set_xlim(-0.05,0.55)
 
 fig.show()
+
 #%% Make a nicer figure for the 2 points
 nature_single = 89.0 / 25.4
 # Plot options

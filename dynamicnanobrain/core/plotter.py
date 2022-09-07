@@ -777,7 +777,7 @@ def plot_chainlist(res, G, source, target, search_string='Pout', doublewidth=Tru
     plt.subplots_adjust(left=0.124, right=0.9, bottom=0.1, top=0.9, wspace=0.1)
     plt.tight_layout()
     
-def sample_npseries(tseries,states,Nplots=12,Ninput=0,onecolumn=False, doublewidth=True, 
+def sample_npseries(tseries,states,transient=0,Nplots=12,Ninput=0,onecolumn=False, doublewidth=True, 
                     overlay=None, rolling_avg=False) :
     import numpy as np 
     
@@ -805,11 +805,11 @@ def sample_npseries(tseries,states,Nplots=12,Ninput=0,onecolumn=False, doublewid
     
     for k, sel in enumerate(selection) :
         ax = axs.flatten()[k]
-        ax.plot(tseries,states[:,selection[k]],label=f'node {selection[k]}')
+        ax.plot(tseries[transient:],states[transient:,selection[k]],label=f'node {selection[k]}')
         if overlay is not None :
             ax.plot(tseries,overlay,'r--')
         if rolling_avg:
-            ax.plot(tseries,moving_average(states[:,selection[k]],100))
+            ax.plot(tseries[transient:],moving_average(states[transient:,selection[k]],100))
         ax.legend()
         ax.set_xlabel('Time (ns)')
 

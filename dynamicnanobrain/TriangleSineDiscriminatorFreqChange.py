@@ -21,7 +21,7 @@
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from scipy.interpolate import interp1d 
-from scipy.signal import square
+from scipy.signal import square, sawtooth
 from pathlib import Path
 import pickle
 # modules specific to this project
@@ -58,24 +58,24 @@ def signal_shape_generator(tend,ttest,f0,dT,tnoise=0,res=25,noise=0.0,amp_shift=
     # Generate the two functions that we switch between
     tau_end = tend*f0*2*np.pi
     tau = np.linspace(0,tau_end,num=N).reshape((N,1))
-    square_shape = (square(tau)+1.0)/2 + amp_shift
+    triang_shape = (sawtooth(tau,width=0.5)+1.0)/2 + amp_shift
     sine_shape = (np.sin(tau)+1.)/2 + amp_shift
     
     # Adjust power level
-    square_shape /= 1.02 
+    #square_shape /= 1.02 
     
     shape_control = np.zeros((N,1))
     signal = np.zeros((N,1))
     for k, (t0,t1) in enumerate(const_intervals): # enumerate here
         shape_control[t0:t1] = k % 2
-        signal[t0:t1] = (k % 2) * square_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
+        signal[t0:t1] = (k % 2) * triang_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
   
     # Add the part where we diagnose the signal
     N2 = int((N+N1)/2)
     shape_control[N1:N2] = 0.0
     shape_control[N2:] = 1.0
     signal[N1:N2] = sine_shape[N1:N2]
-    signal[N2:] = square_shape[N2:]
+    signal[N2:] = triang_shape[N2:]
     
     # Corresponding time vector
     tseries = np.arange(0,tend,step=dt)
@@ -108,24 +108,24 @@ def signal_freq_change_generator(tstart,tlength,ttest,fs,dT,tnoise=0,res=25,nois
     
         tau_end = tlength*f*2*np.pi
         tau = np.linspace(0,tau_end,num=N).reshape((N,1))
-        square_shape = (square(tau)+1.0)/2 + amp_shift
+        triang_shape = (sawtooth(tau,width=0.5)+1.0)/2 + amp_shift
         sine_shape = (np.sin(tau)+1.)/2 + amp_shift
 
         # Adjust power level
-        square_shape /= 1.02 
+        #square_shape /= 1.02 
         
         shape_control = np.zeros((N,1))
         signal = np.zeros((N,1))
         for k, (t0,t1) in enumerate(const_intervals): # enumerate here
             shape_control[t0:t1] = k % 2
-            signal[t0:t1] = (k % 2) * square_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
+            signal[t0:t1] = (k % 2) * triang_shape[t0:t1] + (1. - k % 2) * sine_shape[t0:t1]
       
         # Add the part where we diagnose the signal
         N2 = int((N+N1)/2)
         shape_control[N1:N2] = 0.0
         shape_control[N2:] = 1.0
         signal[N1:N2] = sine_shape[N1:N2]
-        signal[N2:] = square_shape[N2:]
+        signal[N2:] = triang_shape[N2:]
         
         # Corresponding time vector
         tseries = np.arange(0,tlength,step=dt)
@@ -152,7 +152,7 @@ def signal_freq_change_generator(tstart,tlength,ttest,fs,dT,tnoise=0,res=25,nois
 def train_network(network,teacher_signal,Tfit=300,beta=10) :
     
     # Harvest states
-    tseries_train, states_train, _ = network.harvest_states(Tfit,teacher_forcing=False)
+    tseries_train, states_train, _, tend = network.harvest_states(Tfit,teacher_forcing=False)
 
     teacher_train = np.zeros((len(tseries_train),len(teacher_signal)))
     for k in range(0,len(teacher_signal)) :
@@ -160,7 +160,7 @@ def train_network(network,teacher_signal,Tfit=300,beta=10) :
     
     pred_train, train_error = network.fit(states_train,teacher_train,beta)
     
-    return pred_train, train_error, tseries_train, states_train
+    return pred_train, train_error, tseries_train, states_train, tend
 
 def characterize_network(network, teacher_signal, T0=300, Tpred=300) :
     
@@ -222,7 +222,7 @@ def evaluate_noise(tseries_test, pred_test, transient=10,
         ax1.set_ylabel('Output signal (nA)')
         ax1.set_ylim(pred_test[:,0].min()-25,pred_test[:,0].max()+25)
         plotter.save_plot(fig,'noise'+plotname,PLOT_PATH)
-        plt.close(fig)
+        #plt.close(fig)
         
     return mean_low, mean_high, var_low,var_high
 
@@ -244,7 +244,7 @@ def plot_timetrace(tseries_train,pred_train,tseries_test=None,pred_test=None,tea
     ax1.set_ylim(0,pred_test[:,0].max()+25)
     
     plotter.save_plot(fig,'trace_'+plotname,PLOT_PATH)
-    plt.close(fig)
+    #plt.close(fig)
     
     return fig, ax1
     
@@ -258,14 +258,14 @@ def plot_memory_dist(network,plotname) :
     ax.set_xlabel('Memory timescale (ns)')
     ax.set_ylabel('Occurance')
     plotter.save_plot(fig,'memorydist_'+plotname,PLOT_PATH)
-    plt.close(fig)
+    #plt.close(fig)
     
  
 def run_shape_test(f0=0.1,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,sparsity=10,
              transient=0,plotname='shapefreqtest',generate_plots=True,seed=None,noise=0.,
              spectral_radius=0.6,input_scaling=0.8,bias_scaling=0.1,diagnostic=False,
              teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='uniform',
-             fixImax=None,beta=1e4,tnoise=0,fs=[]) :
+             fixImax=None,beta=0.1,tnoise=0,fs=[]) :
 
    # Specify device, start with the 1 ns device that we will scale
     propagator = physics.Device('../parameters/device_parameters_1ns.txt')
@@ -322,13 +322,13 @@ def run_shape_test(f0=0.1,dT=100,Tfit=2000,Tpred=1000,Tnoise=400,Nreservoir=100,
         control_handle = control_signal(fixImax*new_esn.teacher_scaling)
 
     # Train
-    pred_train, train_error, tseries_train, states_train = train_network(new_esn,[control_handle],Tfit=Tfit,beta=beta)
+    pred_train, train_error, tseries_train, states_train, tend = train_network(new_esn,[control_handle],Tfit=Tfit,beta=beta)
     #states_train, teacher_train = train_network(new_esn,[t1_handle,t2_handle],Tfit=Tfit)
     #return states_train, teacher_train, new_esn
     
     # Characterize
     pred_test, pred_error, tseries_test = characterize_network(new_esn, [control_handle], 
-                                                               T0=Tfit,Tpred=Tpred+len(fs)*Tpred)
+                                                               T0=tend,Tpred=Tpred+len(fs)*Tpred)
     print('Prediction error:',pred_error)
     
     if generate_plots :
@@ -355,7 +355,7 @@ def generate_figurename(kwargs,suffix='') :
     return filename
 
 def generate_filename(N,kwargs,suffix='.pkl') :
-    filename = f'shapefreqdata_N{N}'
+    filename = f'triang_freqdata_N{N}'
     for k, v in kwargs.items():
         filename += '_' + k + str(v)
     
@@ -490,7 +490,8 @@ if True :
 
 #%% Setup a network that draw memory timescales from an uniform distribution
 #%%
-train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(memscale=10.0, memory_variation=0.0, f0=0.05,diagnostic=True,fixImax=300,fs=[0.028,0.12,0.24])
+plt.ion()
+train_error, pred_error, signal_diff, noise_var, trial_nw, tseries_train, states_train, pred_train, tseries_test, pred_test, teacher_handle, signal_input = run_shape_test(memscale=10.0, memory_variation=0.9, f0=0.05,diagnostic=True,fixImax=300,fs=[0.028,0.12,0.24])
 trial_nw.Imax 
 
 
@@ -643,7 +644,7 @@ unity_coeff = devices[1].unity_coupling_coefficient(devices[1].eta_ABC)
 
 # Study the memscale effect on the predictabilty
 mem=10
-fs = [0.028, 0.045, 0.24, 0.37]
+fs = [0.028, 0.045, 0.23, 0.37]
 Ndf = len(fs)+1
 param_dicts =[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs]}]
 param_dicts +=[{'n':Ndf,'memscale':[mem],'fixImax':[300],'fs':[fs],'memory_variation':[0.9]}]

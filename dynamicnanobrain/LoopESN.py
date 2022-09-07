@@ -28,7 +28,7 @@ from dynamicnanobrain.esn import esn
 Nreservoir = 40
 SEED=47
 # Get me a network
-my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=0.75)
+my_esn = esn.EchoStateNetwork(Nreservoir,seed=SEED,sparsity=10)
 
 # %%
 

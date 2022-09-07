@@ -166,7 +166,8 @@ def plot_tortuosity(cum_min_dist, ax=None,
 def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
                           param_name,ylabel='Distance (steps)',
                           ax=None, label_font_size=11, unit_font_size=10,
-                          title=None, xmin=10,xmax=10000, ymax=300):
+                          title=None, xmin=10,xmax=10000, ymax=300,xticks=None,
+                          reformat_legend=False):
     fig = None
     if ax is None:
         fig, ax = plt.subplots(figsize=(nature_single, nature_single))
@@ -191,23 +192,32 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     ax.set_ylim(0, ymax)
     ax.set_title(title, fontsize=label_font_size)
     ax.tick_params(labelsize=unit_font_size)
+    if xticks is not None :
+        import matplotlib
+        ax.set_xticks(xticks)
+        # Cancel the formatting
+        ax.get_xaxis().set_major_formatter(matplotlib.ticker.ScalarFormatter())
+        
     ax.set_xlabel('Route length (steps)', fontsize=label_font_size)
     ax.set_ylabel(ylabel, fontsize=label_font_size)
 
     handles, labels = ax.get_legend_handles_labels()
-
+    # Reformat labels here
+    if reformat_legend :
+        labels = [f'{val:.0f}%' for val in param_vals]
+    
     l = ax.legend(handles,
                   labels,
                   loc='best',
                   fontsize=label_font_size,
-                  handlelength=0,
-                  handletextpad=0,
+                  #handlelength=0,
+                  #handletextpad=0,
                   title=f'{param_name}:')
     l.get_title().set_fontsize(label_font_size)
     for i, text in enumerate(l.get_texts()):
         text.set_color(colors[i])
-    for handle in l.legendHandles:
-        handle.set_visible(False)
+    #for handle in l.legendHandles:
+    #    handle.set_visible(False)
     l.draw_frame(False)
     plt.tight_layout()
     return fig, ax

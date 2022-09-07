@@ -212,11 +212,6 @@ class EchoStateNetwork :
         C = self.layers[0].C
         self.layers[3].update_B(self.weights['inp->out'],C)
         
-        # Why is bias scaling placed here???
-        #if bias_scaling is not None :
-        #    self.weights['inp->hd0'].set_W('green',self.weights['inp->hd0'].W[self.channels['green'],:,:]*bias_scaling)
-        #    self.weights['inp->hd1'].set_W('green',self.weights['inp->hd1'].W[self.channels['green'],:,:]*bias_scaling)
-        
         
     def show_network(self, savefig=False,layout='shell',**kwargs) :
         plotter.visualize_network(self.layers, self.weights, 
@@ -346,7 +341,7 @@ class EchoStateNetwork :
         # This is a large pandas data frame of all system variables
         result = time_log.get_timelog()
         
-        return result
+        return result, t # send the exact time back as well
     
     def interp_columns(self,result,tseries,header_exp=None,columns=None,regex=None,return_df=False) :
         # TODO: Could be tidied up a bit with the regex
@@ -385,7 +380,7 @@ class EchoStateNetwork :
         
     def harvest_states(self,T,t0=0.,reset=True,teacher_forcing=True) :
         # First we evolve to T in time from optional t0
-        result = self.evolve(T,t0=t0,teacher_forcing=teacher_forcing,reset=reset)
+        result, tend = self.evolve(T,t0=t0,teacher_forcing=teacher_forcing,reset=reset)
         # Now we fit the output weights using ridge regression
         if not self.silent:
             print("harvesting states...")
@@ -393,7 +388,7 @@ class EchoStateNetwork :
         # Secondly, we employ a discrete sampling of the signals
         tseries = np.arange(t0,T,step=self.timescale,dtype=float)
         # States
-        states_series = self.interp_columns(result,tseries,regex='H.\d?-Pout')
+        states_series = self.interp_columns(result,tseries,regex='H\d+-Pout')
         # Input signals
         inputs_columns = [c for c in result.columns if ('I0' in c) or ('I1' in c) or ('I2' in c)]
         inputs_series = self.interp_columns(result,tseries,columns=inputs_columns)
@@ -412,7 +407,7 @@ class EchoStateNetwork :
         #print('Currents out from H:', self.layers[1].P)
         
         
-        return tseries, extended_states, teacher_series
+        return tseries, extended_states, teacher_series, tend
 
     def fit(self, states, target, beta=100, regularization=True) :
         # we'll disregard the first few states:
@@ -422,7 +417,7 @@ class EchoStateNetwork :
             # Use regularization parameter beta to find output weights
             Nx = states.shape[1]
             # Part to invert
-            X = states[transient:].T @ states[transient:] + beta * np.diag([1]*Nx)
+            X = states[transient:].T @ states[transient:] + beta * self.Imax**2 * np.diag([1]*Nx)
             # Part including the target
             YX = target[transient:].T @ states[transient:]
             # Final expression
@@ -439,8 +434,9 @@ class EchoStateNetwork :
         self.add_trained_weights(W_out,'blue')
 
         # Generate the prediction for the traning data
-        pred_train = self._unscale_teacher(np.dot(states, 
-                                                  W_out.T))
+        #pred_train = self._unscale_teacher(np.dot(states, 
+        #                                          W_out.T))
+        pred_train = np.dot(states,W_out.T) # scaling not necessary
         
         error = np.sqrt(np.mean((pred_train[transient:] - target[transient:])**2))/self.Imax
         
@@ -455,7 +451,7 @@ class EchoStateNetwork :
             print("predicting...")
                 
         # First we evolve to T in time from optional t0, without resetting 
-        result = self.evolve(T,t0=t0,reset=False)
+        result, tend = self.evolve(T,t0=t0,reset=False)
         
         # Secondly, we employ a discrete sampling of the signals
         tseries = np.arange(t0,T,step=self.timescale,dtype=float)
@@ -463,11 +459,11 @@ class EchoStateNetwork :
         #output_series = self.interp_columns(result,tseries,header_exp='O0-Pout')
         output_series = self.interp_columns(result,tseries,regex='O\d-Pout')
         movie_series = self.interp_columns(result,tseries,regex='Pout',return_df=True)
-        unscaled_output = self._unscale_teacher(output_series)
+        unscaled_output = self._unscale_teacher(output_series) # not used at the moment
         plot_series = self.interp_columns(result,tseries,return_df=True)
         
         if output_all :
-            return tseries, unscaled_output, movie_series, plot_series
+            return tseries, output_series, movie_series, plot_series
         else :
-            return tseries, unscaled_output, movie_series
+            return tseries, output_series, movie_series
         

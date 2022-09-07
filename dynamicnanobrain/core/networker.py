@@ -399,7 +399,7 @@ class OutputLayer(Layer) :
         """ Reset the memory."""
         # create a np array of fixed size to handle the memory structure
         self.teacher_memory=np.zeros((nsave,len(self.B.flatten())+1))
-    
+        
     def set_output_func(self, func_handle, func_args=None) :
         """
         Assign a continous function handle to get the input current at time t
@@ -426,9 +426,9 @@ class OutputLayer(Layer) :
         # Work on class object self.I instead of an arbitrary thing
         try :
             if self.output_func_args is not None:
-                self.I = self.output_func_handles(t,*self.output_func_args)
+                self.I[0] = self.output_func_handles(t,*self.output_func_args)
             else :
-                self.I = self.output_func_handles(t)
+                self.I[0] = self.output_func_handles(t)
         except :
             pass
         
@@ -485,7 +485,7 @@ class OutputLayer(Layer) :
             # Write new value
             self.teacher_memory[-1]=np.concatenate((np.array([t]),self.B.flatten()))
             # Now we choose the correct memory point to choose from
-            t_find = max(t-self.teacher_delay,t0) # starts at t0
+            t_find = max(t-self.teacher_delay,t0) # starts at 0
             # Search for point just before t, start from end of the deque
             idx_t=-1 
             while t_find < self.teacher_memory[idx_t,0] :
@@ -503,6 +503,8 @@ class OutputLayer(Layer) :
             B_for_update = teacher_signal[1:].reshape(self.N)
         else :
             B_for_update = self.B
+            
+        B_for_update = np.clip(B_for_update,0,None)
             
         self.C = np.copy(B_for_update)
         

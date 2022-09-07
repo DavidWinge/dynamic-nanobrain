@@ -104,33 +104,21 @@ distances = [100, 200, 400, 750, 1500, 3000, 6000]
 #distances = [1500]
 N_dists= len(distances)
 
-# List of parameters that have been studied (keeping for reference)
-inputscale_vals = [0.7, 0.8, 0.9, 1.0]
-memscale_vals = [1250, 2500, 5000, 10000, 20000, 40000, 80000, 160000]
-memupdate_vals = 0.05/100 * np.sqrt(memscale_vals)
+# List of parameters that have been studied 
 Vt_noise_vals = [0.01, 0.02, 0.05]
-reduced_a = 0.07
-noise_vals = [0.05, 0.1, 0.15, 0.2]
+w_noise_vals = [0.025, 0.05, 0.1]
+noise = 0.2
 
-# Specify the dict of parameters
-param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[1.0]*N_dists,'bias_scaling':[0.1]*N_dists,
-                'hupdate':[2e-4]*N_dists,'noise':[0.05]*N_dists,'mem_init_c':[0.3]*N_dists,
+# Specify the dict of parameters for the Vt_noise test
+
+# First the reference case
+param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
                 'T_outbound': distances,'T_inbound': distances}]
 
-param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
-                'T_outbound': distances,'T_inbound': distances} for noise in noise_vals]
-
-param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[0.1]*N_dists,
-                'Vt_noise':[vt_noise],
-                'T_outbound': distances,'T_inbound': distances} for vt_noise in Vt_noise_vals]
-
-# List of dictionaries
-#param_dicts = [{'n':N_dists, 'a':[reduced_a]*N_dists, 'Vt_noise': [noise]*N_dists, 'T_outbound': distances, 'T_inbound': distances} for noise in Vt_noise_vals]
-#param_dicts = [{'n':N_dists, 'memscale':[memscale_vals[k]]*N_dists, 'memupdate':[memupdate_vals[k]]*N_dists, 
-#                'T_outbound': distances, 'T_inbound': distances} for k in range(len(memscale_vals))]
-
-# This dictionary specifies an earlier run that I kept the data from
-#param_dict_ref = {'n':N_dists,'T_outbound': distances, 'T_inbound': distances}
+# Now the variation over Vt_noise
+param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+                'Vt_noise':[Vt_noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for Vt_noise in Vt_noise_vals]
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -144,6 +132,50 @@ for param_dict in param_dicts:
     search_dists_l.append(search_dist)
     search_dist_stds.append(search_dist_std)
     
+    
+#%% Generate the plots for the selected data set
+
+# The plot versus distance
+Vt_noise_labels = [0.0] + [value*1000 for value in Vt_noise_vals]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, Vt_noise_labels, 
+                                           r'$V_T$ noise (mV)',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list)
+fig.show()
+
+#%% Generate data for the weight noise as well
+
+# First the reference case
+param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances}]
+
+# Now the variation over Vt_noise
+param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+                'weight_noise':[w_noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for w_noise in w_noise_vals]
+
+min_dists_l = []
+min_dist_stds_l = []
+search_dists_l=[]
+search_dist_stds=[]
+    
+for param_dict in param_dicts:
+    min_dists, min_dist_stds , search_dist, search_dist_std, _ = analyse(N, param_dict)
+    min_dists_l.append(min_dists)
+    min_dist_stds_l.append(min_dist_stds)
+    search_dists_l.append(search_dist)
+    search_dist_stds.append(search_dist_std)
+
+#%% Generate the plots for the selected data set
+
+# The plot versus distance
+w_noise_labels = [value*100 for value in [0] + w_noise_vals]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, w_noise_labels, 
+                                           'Weight noise',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list, reformat_legend=True)
+fig.show()
+
 #%% Extract also other quantaties using another analysis method
 path_straightness_l = []
 for param_dict in param_dicts:
