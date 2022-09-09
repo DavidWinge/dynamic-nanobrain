@@ -44,7 +44,7 @@ nature_full = 247.0 / 25.4
 # These are generated as a random sequence of frequecies.
 import numpy as np
 
-def frequency_step_generator(tend,fmin,fmax,dT,res=10,seed=None) :
+def frequency_step_generator(tend,fmin,fmax,dT,res=20,seed=None) :
     # determine the size of the sequence\
     rng = np.random.default_rng(seed)
     dt = fmax**-1/res
@@ -243,7 +243,7 @@ def single_test(fmin=0.025,fmax=0.1,Nf=2,dT=50,Tfit=1000,Tpred=1000,Nreservoir=1
     
     # Generate the target signal
     signal_handle = signal_func(new_esn.Imax*new_esn.teacher_scaling)
-    control_handle = control_func(new_esn.Imax)
+    control_handle = control_func(new_esn.Imax*new_esn.input_scaling)
     
     start = time.time()
     # Train
@@ -287,7 +287,7 @@ def generate_filename(N,kwargs,suffix='.pkl') :
     
     return filename+suffix
 
-def repeat_runs(N, param_dict,save=True) :
+def repeat_runs(N, param_dict,save=True,seed_zero=0) :
     """Iterates through param dictionary, running batches of trials according to the param dictionary"""
       
     timing=np.zeros((N,param_dict['n']))
@@ -312,9 +312,9 @@ def repeat_runs(N, param_dict,save=True) :
         # Otherwise run it now
         for m in range(N) :
             plotname = generate_figurename(kwargs,suffix=f'_{m}')
-            train_errors[m], pred_errors[m], freq_errors[m], timing[m], states = single_test(plotname=plotname,seed=m,**kwargs)
+            train_errors[m], pred_errors[m], freq_errors[m], timing[m], states = single_test(plotname=plotname,seed=m+seed_zero,**kwargs)
             if save :
-                save_training((states,m), N, kwargs, m)
+                save_training((states), N, kwargs, seed_zero)
             print('Status update, m =',m)
             plt.close('all')
     
@@ -324,11 +324,11 @@ def repeat_runs(N, param_dict,save=True) :
 
     return train_errors, pred_errors, freq_errors, timing
 
-def save_training(arrays,N,kwargs,m):
-    filename = f'traindata{m}_' + generate_filename(N,kwargs) 
+def save_training(arrays,N,kwargs,seed_zero):
+    filename = f'train_seed{seed_zero}_' + generate_filename(N,kwargs) 
         
     # save to a pickle file
-    with open(TRAIN_PATH / filename,'wb') as f :
+    with open(TRAIN_PATH / filename,'ab') as f :
         for a in arrays :
             pickle.dump(a,f)
 
@@ -403,15 +403,16 @@ plt.show
 #%% Driver code
 
 plt.ion()
-train_error, pred_error, freq_error, time_used, states, new_esn, tseries_train, pred_train, tseries_test, pred_test, signal_handle, control_handle = single_test(fmin=0.02,fmax=0.1,Tfit=2000,Tpred=2000,dT=100,teacher_scaling=1.25,diagnostic=True,beta=0.01,memscale=5,memory_variation=0.8)
+train_error, pred_error, freq_error, time_used, states, new_esn, tseries_train, pred_train, tseries_test, pred_test, signal_handle, control_handle = single_test(fmin=0.005,fmax=0.1,Tfit=2000,Tpred=2000,dT=100,teacher_scaling=1.75,diagnostic=True,beta=0.01,memscale=5,memory_variation=0.8,seed=4,sparsity=5)
 
 
-#%% Force f1min=f2max to check capability of network
-f_vals = np.arange(0.02,0.201,step=0.01)
+#%% Perform a grid test to study spectral radius and scaling (could also do sparsity)
+rho_vals = [0.25, 0.5, 0.75, 1.0, 1.25]
+scale_vals = [0.5, 0.75, 1.0, 1.25, 1.5]
 Ndf=1
-param_dicts =[{'n':Ndf,'Tfit':[500],'Tpred':[500],'fmin':[f],'fmax':[f],'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]} for f in f_vals]
+param_dicts =[{'n':Ndf,'teacher_scaling':[scale],'spectral_radius':[rho],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8],'seed_zero':[42]} for scale in scale_vals for rho in rho_vals]
 
-N=1 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+N=10 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
 
 freq_errors = np.zeros((len(param_dicts),N,Ndf))
 timing = np.zeros((len(param_dicts),N,Ndf))
@@ -419,7 +420,22 @@ train_errors = np.zeros((len(param_dicts),N,Ndf))
 pred_errors = np.zeros((len(param_dicts),N,Ndf))
 
 for k, param_dict in enumerate(param_dicts):    
-    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict)
+    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=5)
+#%% Force f1min=f2max to check capability of network
+f_vals = np.arange(0.02,0.201,step=0.01)
+Ndf=1
+f_vals = [0.06]
+param_dicts =[{'n':Ndf,'Tfit':[200],'Tpred':[200],'fmin':[f],'fmax':[f],'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]} for f in f_vals]
+
+N=3 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+
+freq_errors = np.zeros((len(param_dicts),N,Ndf))
+timing = np.zeros((len(param_dicts),N,Ndf))
+train_errors = np.zeros((len(param_dicts),N,Ndf))
+pred_errors = np.zeros((len(param_dicts),N,Ndf))
+
+for k, param_dict in enumerate(param_dicts):    
+    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=9)
 
 #%%
 fig, ax1 = plt.subplots(figsize=(nature_full,nature_single))
