@@ -59,7 +59,7 @@ def evolve(t, layers, dVmax, dtmax) :
     
     return dt
             
-def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False, noise=None) :   
+def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False, noise=None,delay=0) :   
     # Time updating sequence
     # Update first all voltages V and reset currents in matrices B
     for key, layer in layers.items() :
@@ -73,7 +73,7 @@ def update(dt, t, layers, weights, unity_coeff=1.0, t0=0.,teacher_forcing=False,
         # This should be done after receiving the information from the network
         if layer.layer_type == 'output' :
             if teacher_forcing :
-                layer.update_C(t)           
+                layer.update_C(t-delay)           
             else :
                 # Send the signals back into the network, if connected
                 layer.update_C_from_B(t,t0)

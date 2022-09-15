@@ -90,7 +90,7 @@ def plot_timetrace(tseries_train,pred_train,tseries_test,pred_test,teacher_handl
 
     ax1.set_ylabel('Output signal (nA)')
     ax1.set_ylim(0,teacher_series[:,0].max()+25)
-    ax1.set_xlim(tseries_test[0]-500, tseries_test[0]+1000)
+    ax1.set_xlim(tseries_test[0]-500, tseries_test[0]+2000)
     plotter.save_plot(fig,'trace_'+plotname,PLOT_PATH)
     #plt.close(fig)
     
@@ -122,10 +122,14 @@ def plot_memory_dist(network,plotname) :
     plotter.save_plot(fig,'memorydist_'+plotname,PLOT_PATH)
     plt.close(fig)
     
-def train_network(network,teacher_signal,Tfit=300,beta=10,teacher_forcing=False) :
+def train_network(network,teacher_signal,Tfit=300,beta=10,teacher_forcing=False,states=None) :
     
-    # Harvest states
-    tseries_train, states_train, _, tend = network.harvest_states(Tfit,teacher_forcing=teacher_forcing)
+    if states is None :
+        # Harvest states
+        tseries_train, states_train, _, tend = network.harvest_states(Tfit,teacher_forcing=teacher_forcing)
+    else :
+        tseries_train = np.arange(0.,Tfit,step=network.timescale,dtype=float)
+        tend = Tfit # will have to do for now
 
     teacher_train = np.zeros((len(tseries_train),len(teacher_signal)))
     for k in range(0,len(teacher_signal)) :
@@ -149,13 +153,32 @@ def characterize_network(network, teacher_signal, T0=300, Tpred=300) :
     
     return pred_test, pred_error, tseries_test
 
-def fspec(data,dt,fcutoff,plotname):
-    fig, ax = plt.subplots()
-    spectrum, freqs, t, im = ax.specgram(np.squeeze(data),Fs=int(1/dt),NFFT=128,noverlap=32)
+def plot_spectrogram(data,dt,fcutoff,ax=None,xstart=0,NFFT=128,noverlap=32) :
+    if ax is None :
+        fig, ax = plt.subplots() # create new if no one is passed
+    else :
+        fig = None
+    
+    # Caclulate the size of the bins to get the xextent
+    N = len(data)
+    bin_pos=[]
+    k = NFFT // 2
+    while k + NFFT//2 < N :        
+        bin_pos.append(k)
+        k += NFFT-noverlap
+    # bin width is NFFT-noverlap
+    xextent = (xstart+noverlap//2, xstart + bin_pos[-1]+(NFFT-noverlap)//2)    
+    spectrum, freqs, t, im = ax.specgram(np.squeeze(data),Fs=int(1/dt),NFFT=NFFT,noverlap=noverlap,xextent=xextent)
     fmin_idx = np.flatnonzero(freqs>fcutoff)[0] # first index BELOW fmin
     max_args = np.argmax(spectrum[fmin_idx:],axis=0) + fmin_idx
     max_freq = freqs[max_args]
-    ax.plot(t,max_freq,'ro')
+    scale_t = xstart+t
+    ax.plot(scale_t,max_freq,'ro')
+
+    return fig, ax, t, max_freq
+    
+def fspec(data,dt,fcutoff,plotname):
+    fig, ax, t, max_freq = plot_spectrogram(data,dt,fcutoff)
     plotter.save_plot(fig,'spec'+plotname,PLOT_PATH)
     return t, max_freq
     
@@ -173,7 +196,7 @@ def evaluate_nw(ts,pred,signal_handle,fcutoff,control_handle,plotname):
     # Now compare these signals
     freq_error = np.sqrt(np.mean((f_pred-f_teach)**2))
     # Tweak!
-    freq_error = f_pred[0]
+    #freq_error = f_pred[0]
     return freq_error
 
 def normalize(x,tiny=1e-15,interval=(0.,1.)):
@@ -188,11 +211,11 @@ def normalize(x,tiny=1e-15,interval=(0.,1.)):
     x += mean
     return x+tiny
     
-def single_test(fmin=0.025,fmax=0.1,Nf=2,dT=50,Tfit=1000,Tpred=1000,Nreservoir=100,sparsity=10,
+def single_test(fmin=0.005,fmax=0.1,Nf=2,dT=50,Tfit=2000,Tpred=2000,Nreservoir=100,sparsity=10,
              transient=0,plotname='freqgen',generate_plots=True,seed=None,noise=0.,
-             spectral_radius=0.25,input_scaling=1.25,bias_scaling=0.1,diagnostic=False,
-             teacher_scaling=1.0, memory_variation=0.0, memscale=1.0, dist='uniform',
-             beta=0.1,fcutoff=0.015) :
+             spectral_radius=0.25,input_scaling=0.5,bias_scaling=0.1,diagnostic=False,
+             teacher_scaling=0.5, memory_variation=0.0, memscale=1.0, dist='uniform',
+             beta=0.1,fcutoff=0.015,states_train=None) :
 
    # Specify device, start with the 1 ns device that we will scale
     propagator = physics.Device('../parameters/device_parameters_1ns.txt')
@@ -211,10 +234,10 @@ def single_test(fmin=0.025,fmax=0.1,Nf=2,dT=50,Tfit=1000,Tpred=1000,Nreservoir=1
                             Noutput=1)
     
     # For teacher forcing we can set the delay here
-    new_esn.set_delay(1.,1600)
+    new_esn.set_delay(1.,2400)
     
     if memory_variation > 0.0 :
-        new_esn.randomize_memory(memory_variation,dist)
+        new_esn.randomize_memory(memory_variation,dist,seed)
         #plot_memory_dist(new_esn)
         
     control, signal, tseries = frequency_step_generator(Tfit+Tpred,fmin,fmax,dT,seed=seed) 
@@ -314,6 +337,7 @@ def repeat_runs(N, param_dict,save=True,seed_zero=0) :
             plotname = generate_figurename(kwargs,suffix=f'_{m}')
             train_errors[m], pred_errors[m], freq_errors[m], timing[m], states = single_test(plotname=plotname,seed=m+seed_zero,**kwargs)
             if save :
+                # TODO: Need also to save a network activity snapshot
                 save_training((states), N, kwargs, seed_zero)
             print('Status update, m =',m)
             plt.close('all')
@@ -324,6 +348,9 @@ def repeat_runs(N, param_dict,save=True,seed_zero=0) :
 
     return train_errors, pred_errors, freq_errors, timing
 
+def validation_runs(N, param_dict, save=True, seed_zero=0) :
+    return
+    
 def save_training(arrays,N,kwargs,seed_zero):
     filename = f'train_seed{seed_zero}_' + generate_filename(N,kwargs) 
         
@@ -332,6 +359,15 @@ def save_training(arrays,N,kwargs,seed_zero):
         for a in arrays :
             pickle.dump(a,f)
 
+def load_training(N,kwargs,seed_zero=0) :
+    filename = f'train_seed{seed_zero}_' + generate_filename(N,kwargs) 
+    states = []
+    with open(TRAIN_PATH / filename,'rb') as f :
+        # Items read sequentially
+        for k in range(N) :
+            states[k] = pickle.load(f)
+    return states
+    
 def save_dataset(arrays,N,kwargs):
     filename = generate_filename(N,kwargs)
         
@@ -403,41 +439,121 @@ plt.show
 #%% Driver code
 
 plt.ion()
-train_error, pred_error, freq_error, time_used, states, new_esn, tseries_train, pred_train, tseries_test, pred_test, signal_handle, control_handle = single_test(fmin=0.005,fmax=0.1,Tfit=2000,Tpred=2000,dT=100,teacher_scaling=1.75,diagnostic=True,beta=0.01,memscale=5,memory_variation=0.8,seed=4,sparsity=5)
+train_error, pred_error, freq_error_0, time_used, states, new_esn, tseries_train_0, pred_train_0, tseries_test_0, pred_test_0, signal_handle, control_handle = single_test(diagnostic=True,beta=0.01,memscale=5,memory_variation=0.8,seed=4)
+train_error, pred_error, freq_error_0, time_used, states, new_esn, tseries_train_1, pred_train_1, tseries_test_1, pred_test_1, signal_handle, control_handle = single_test(diagnostic=True,beta=0.01,memscale=5,memory_variation=0.0,seed=4)
 
+#%% Compare spectrogram, teacher and prediction
+teacher = signal_handle(tseries_test_0)
+dt = tseries_test_0[1]-tseries_test_0[0]
+fmax = 0.1
+xmin = 2000
+xmax = 4000
 
-#%% Perform a grid test to study spectral radius and scaling (could also do sparsity)
-rho_vals = [0.25, 0.5, 0.75, 1.0, 1.25]
-scale_vals = [0.5, 0.75, 1.0, 1.25, 1.5]
-Ndf=1
-param_dicts =[{'n':Ndf,'teacher_scaling':[scale],'spectral_radius':[rho],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8],'seed_zero':[42]} for scale in scale_vals for rho in rho_vals]
+fig, axs = plt.subplots(2,1,figsize=(nature_single,nature_single),sharex=True)
 
-N=10 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+_, _, t, max_freq_test0 = plot_spectrogram(pred_test_0,dt,fcutoff=0.015,ax=axs[0],xstart=xmin)
+_, _, t, max_freq_teacher = plot_spectrogram(teacher,dt,fcutoff=0.015,ax=axs[1],xstart=xmin)
 
-freq_errors = np.zeros((len(param_dicts),N,Ndf))
-timing = np.zeros((len(param_dicts),N,Ndf))
-train_errors = np.zeros((len(param_dicts),N,Ndf))
-pred_errors = np.zeros((len(param_dicts),N,Ndf))
+#axs[0].set_xlim(xmin,xmax)
+axs[0].set_ylim(0,fmax)
+axs[1].set_ylim(0,fmax)
 
-for k, param_dict in enumerate(param_dicts):    
-    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=5)
-#%% Force f1min=f2max to check capability of network
-f_vals = np.arange(0.02,0.201,step=0.01)
-Ndf=1
-f_vals = [0.06]
-param_dicts =[{'n':Ndf,'Tfit':[200],'Tpred':[200],'fmin':[f],'fmax':[f],'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]} for f in f_vals]
+# Tweak the tick labels
+y1_labels = [f'{val:.2f}' for val in np.arange(0.02,0.12,0.02)]
+y1_labels.insert(0,'')
+axs[0].set_yticklabels(y1_labels)
+#y1_labels[0] = ''
+#axs[0].set_yticklabels(y1_labels) # fick labels
 
-N=3 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+axs[0].tick_params(direction='inout',top=True)
+axs[1].tick_params(direction='inout',top=True)
 
-freq_errors = np.zeros((len(param_dicts),N,Ndf))
-timing = np.zeros((len(param_dicts),N,Ndf))
-train_errors = np.zeros((len(param_dicts),N,Ndf))
-pred_errors = np.zeros((len(param_dicts),N,Ndf))
+axs[1].set_xlabel('Time (ns)')
+axs[1].set_ylabel('Teacher freq. (GHz)')
+axs[0].set_ylabel('Pred. freq. (GHz)')
+plt.subplots_adjust(hspace=0,left=0.2,right=0.95,bottom=0.15,top=0.95)
+#plt.tight_layout()
+plt.show()
 
-for k, param_dict in enumerate(param_dicts):    
-    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=9)
+#%% Get both results into a control frequency plot
+def plot_control_multifreq(ts,control_handle,tf,fp,ft,plotname='',labels=None):
+    fig, ax1 = plt.subplots(figsize=(nature_single,nature_single))
+    #ax1.plot(ts,control_handle(ts),label='control')
+    if labels is None :
+        labels = ['']*len(fp)
+        
+    markers = ['b^','ro']    
+    for k,f in enumerate(fp) :
+        ax1.plot(tf+ts[0],f,markers[k],label=labels[k]) # tf is measured from 0
+        
+    ax1.plot(tf+ts[0],ft,'kx',label='teacher')
+    ax1.set_xlabel('Time (ns)')
+    ax1.set_ylabel('Frequency control')
+    ax1.legend()
+    
+    plotter.save_plot(fig,'control_'+plotname,PLOT_PATH)
+    #plt.close(fig)
+    
+    return fig, ax1
 
-#%%
+_, _, t, max_freq_test1 = plot_spectrogram(pred_test_1,dt,fcutoff=0.015,ax=axs[0],xstart=xmin)
+
+fmax_cut=0.12
+max_freq_test1 = np.clip(max_freq_test1,None,fmax_cut)
+
+fig, ax = plot_control_multifreq(tseries_test_0,control_handle,t,[max_freq_test1,max_freq_test0],max_freq_teacher,labels=[r'fixed-$\tau$',r'dist-$\tau$'])
+
+ax.set_ylim(0,fmax_cut)
+ax.set_xlim(xmin,xmax)
+ax.grid(True)
+plt.tight_layout()
+
+#%% Compare the traces, single vs. dist
+
+# Get the colors 
+my_dpi = 300
+prop_cycle = plt.rcParams['axes.prop_cycle']
+colors = prop_cycle.by_key()['color']
+color_single_train=colors[0]
+color_dist_train=colors[1]
+color_teacher=colors[2]
+
+fig, ax1 = plt.subplots(figsize=(nature_full,nature_single))
+
+ax1.plot(tseries_train_1[:],pred_train_1[:,0],linewidth=0.5,color=color_dist_train,label=r'fixed-$\tau$')
+ax1.plot(tseries_train_0[:],pred_train_0[:,0],linewidth=0.5,color=color_single_train,label=r'dist-$\tau$')
+ax1.plot(tseries_train_0,signal_handle(tseries_train_0),'--',linewidth=0.5,color=color_teacher)
+
+teacher_series=signal_handle(tseries_test_0)
+ax1.plot(tseries_test_0[:],pred_test_0[:,0],linewidth=0.5,color=color_single_train)
+ax1.plot(tseries_test_1[:],pred_test_1[:,0],linewidth=0.5,color=color_dist_train)
+ax1.plot(tseries_test_0,teacher_series,'--',linewidth=0.5,color=color_teacher)
+    
+ax1.plot(tseries_train_0,control_handle(tseries_train_0),'k',linewidth=0.5,label='control input')
+ax1.plot(tseries_test_0,control_handle(tseries_test_0),'k',linewidth=0.5)
+
+ax1.set_xlabel('Time (ns)')
+
+ax1.set_ylabel('Output signal (nA)')
+ax1.set_ylim(0,teacher_series[:,0].max()+25)
+ax1.set_xlim(tseries_test_0[0]-500, tseries_test_0[0]+1000)
+
+from matplotlib import patches
+# Create a Rectangle patch
+rect = patches.Rectangle((tseries_test_0[0]-500, 0), 500, teacher_series[:,0].max()+25, linewidth=1, edgecolor='none', facecolor='gray',alpha=0.4)
+
+# Add the patch to the Axes
+ax1.add_patch(rect)
+
+ax1.legend(loc='upper right')
+#plotter.save_plot(fig,'trace_'+plotname,PLOT_PATH)
+#plt.close(fig)
+
+plt.tight_layout()
+
+plt.show()
+#%% Look at the traces
+
 fig, ax1 = plt.subplots(figsize=(nature_full,nature_single))
 
 ax1.plot(tseries_train[:],pred_train[:,0],linewidth=0.5)
@@ -459,6 +575,83 @@ ax1.set_xlim(tseries_test[0]-500, tseries_test[0]+1000)
 #plt.close(fig)
 
 plt.show()
+
+#%% Perform a grid test to study spectral radius and scaling (could also do sparsity)
+rho_vals = [0.25, 0.5, 0.75, 1.0, 1.25]
+scale_vals = [0.5, 0.75, 1.0, 1.25, 1.5]
+Ndf=1
+param_dicts =[{'n':Ndf,'teacher_scaling':[scale],'input_scaling':[scale],'spectral_radius':[rho],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]} for scale in scale_vals for rho in rho_vals]
+
+N=10 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+
+freq_errors = np.zeros((len(param_dicts),N,Ndf))
+timing = np.zeros((len(param_dicts),N,Ndf))
+train_errors = np.zeros((len(param_dicts),N,Ndf))
+pred_errors = np.zeros((len(param_dicts),N,Ndf))
+
+for k, param_dict in enumerate(param_dicts):    
+    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=5)
+
+#%% Analyze the results of the grid search
+
+# The first result that we want is the mean error vs scale and rho
+Nscale = len(scale_vals)
+Nrho = len(rho_vals)
+mean_error = np.zeros((Nscale,Nrho))
+for k in range(0,Nscale) :
+    for l in range(0,Nrho) :
+        mean_error[k,l] = freq_errors[Nscale*k+l].mean()
+        print(Nscale*k+l)
+    
+#%% Show a pcolor plot of this
+
+fig, ax = plt.subplots()
+
+scale, rho = np.meshgrid(scale_vals,rho_vals)
+im = ax.pcolor(scale,rho,mean_error.T)
+
+ax.set_yticks(rho_vals)
+ax.set_xticks(scale_vals)
+ax.set_ylabel('Spectral radius')
+ax.set_xlabel('Input/teacher scaling')
+plt.colorbar(im,ax=ax,label='Avg. freq. error')
+
+plt.show()
+
+#%% Show also all results with std as well
+
+# How to name the entries on the xaxis
+x_labels = [f'scale:{scale}, rho:{rho}' for scale in scale_vals for rho in rho_vals]
+
+fig, ax = plt.subplots()
+
+mean_error_lin = np.squeeze(freq_errors.mean(axis=1))
+std_error = np.squeeze(freq_errors.std(axis=1))
+xvals = np.arange(0,Nrho*Nscale)
+ax.errorbar(xvals,mean_error_lin,std_error,ecolor='black',elinewidth=0.5,capsize=1.)
+
+ax.set_xticks(xvals,labels=x_labels,rotation='vertical')
+ax.set_ylabel('Freq. error')
+plt.tight_layout()
+plt.show()
+
+#%% Force f1min=f2max to check capability of network
+f_vals = np.arange(0.02,0.201,step=0.01)
+Ndf=1
+f_vals = [0.06]
+param_dicts =[{'n':Ndf,'Tfit':[200],'Tpred':[200],'fmin':[f],'fmax':[f],'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]} for f in f_vals]
+
+N=3 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+
+freq_errors = np.zeros((len(param_dicts),N,Ndf))
+timing = np.zeros((len(param_dicts),N,Ndf))
+train_errors = np.zeros((len(param_dicts),N,Ndf))
+pred_errors = np.zeros((len(param_dicts),N,Ndf))
+
+for k, param_dict in enumerate(param_dicts):    
+    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=9)
+
+
 #%%
 
 
@@ -477,6 +670,22 @@ fig.show()
 #%% Compare performance between dist and single tau's
 Ndf = 1
 
+param_dicts  =[{'n':Ndf,'teacher_scaling':[0.5],'input_scaling':[0.5],'spectral_radius':[0.25],'beta':[0.01],'memscale':[5.]}]
+param_dicts  +=[{'n':Ndf,'teacher_scaling':[0.5],'input_scaling':[0.5],'spectral_radius':[0.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]}]
+
+N=20 # Each simulation is about 8 mins with a memory distribution, 1 min with plain memory
+
+freq_errors = np.zeros((len(param_dicts),N,Ndf))
+timing = np.zeros((len(param_dicts),N,Ndf))
+train_errors = np.zeros((len(param_dicts),N,Ndf))
+pred_errors = np.zeros((len(param_dicts),N,Ndf))
+
+for k, param_dict in enumerate(param_dicts):    
+    train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict,seed_zero=11)
+    
+#%% POST-GRIDSEARCH: Compare performance between dist and single tau's
+Ndf = 1
+
 param_dicts  =[{'n':Ndf,'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.]}]
 param_dicts +=[{'n':Ndf,'teacher_scaling':[1.25],'beta':[0.01],'memscale':[5.],'memory_variation':[0.8]}]
 
@@ -491,7 +700,6 @@ pred_errors = np.zeros((len(param_dicts),N,Ndf))
 for k, param_dict in enumerate(param_dicts):    
     train_errors[k], pred_errors[k], freq_errors[k], timing[k] = repeat_runs(N,param_dict)
     
-    
 #%% Construct plot over frequency errors to identigy succesful runs
 
 fig, ax = plt.subplots(figsize=(nature_single,nature_single))
@@ -503,6 +711,29 @@ ax.plot(freq_errors[1],label='dist. memory')
 ax.set_xlabel('run #')
 ax.set_ylabel('Frequency prediction RMS error')
 ax.legend()
+plt.tight_layout()
+plt.show()
+   
+#%% Plot mean of the frequency error (with standard deviation)
+# Import the handler
+from matplotlib.legend_handler import HandlerErrorbar
+
+fig, ax = plt.subplots(figsize=(nature_single,nature_single))
+
+l1 = ax.errorbar([0],freq_errors[0].mean(),freq_errors[0].std(),fmt='^',label='fixed memory',elinewidth=1.0,capsize=2.)
+l2 = ax.errorbar([0],freq_errors[1].mean(),freq_errors[1].std(),fmt='o',label='dist. memory',elinewidth=1.0,capsize=2.)
+#ax.set_xticklabels(input_scale_vals)
+#plt.colorbar(im,ax=ax)
+ax.set_xlabel('')
+ax.set_xticks([0])
+ax.set_xticklabels(['Network tests'])
+ax.set_xlim(-0.5,0.5)
+ax.set_ylabel('Frequency prediction RMS error')
+ax.legend(loc='upper left',
+          fontsize=8,
+          frameon=False,
+          labelspacing=1.75,
+          handler_map={type(l1): HandlerErrorbar(xerr_size=1.0)})
 plt.tight_layout()
 plt.show()
    

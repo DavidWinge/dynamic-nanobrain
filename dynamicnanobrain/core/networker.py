@@ -131,7 +131,7 @@ class HiddenLayer(Layer) :
         self.Adist = np.zeros((self.N,3,3))
         self.Adist[:] = self.device.A
         
-    def generate_uniform_Adist(self, scale) :
+    def generate_uniform_Adist(self, scale, seed=None) :
         """Here we do another variation of the memory constants"""
         if self.device is None :
             print("Please first assign a device before generating Adist")
@@ -139,7 +139,7 @@ class HiddenLayer(Layer) :
             A = np.zeros((self.N,3,3))
             R_ref = self.device.p_dict['Rstore']
             C_ref = self.device.p_dict['Cstore']
-            rng = np.random.RandomState()
+            rng = np.random.RandomState(seed)
             scale_RC_dist = np.sqrt(rng.uniform(1.-scale,1.+scale,size=self.N))
             for k in range(0,self.N) :
                 A[k] = self.device.calc_A(R_ref*scale_RC_dist[k],C_ref*scale_RC_dist[k])

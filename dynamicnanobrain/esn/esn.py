@@ -235,14 +235,14 @@ class EchoStateNetwork :
             self.layers[2].assign_device(device)
         self.unity_coeff, self.Imax = device.inverse_gain_coefficient(device.eta_ABC, self.layers[1].Vthres)
         
-    def randomize_memory(self,noise=0.1,dist='normal') :
+    def randomize_memory(self,noise=0.1,dist='normal',seed=None) :
         """Introduce a distribution of memory constants in the hidden layers"""
         for k in [1,2] :
             self.layers[k].multiA = True
             if dist=='normal' :
                 self.layers[k].generate_Adist(noise)
             elif dist=='uniform' :
-                self.layers[k].generate_uniform_Adist(noise)
+                self.layers[k].generate_uniform_Adist(noise,seed)
             elif dist=='exp' :
                 self.layers[k].generate_exp_Adist(noise)
             elif dist=='poisson' :
@@ -320,7 +320,7 @@ class EchoStateNetwork :
         
             # update with explicit Euler using dt
             # supplying the unity_coeff here to scale the weights
-            tm.update(dt, t, self.layers, self.weights, unity_coeff=self.unity_coeff, t0=t0, teacher_forcing=teacher_forcing)
+            tm.update(dt, t, self.layers, self.weights, unity_coeff=self.unity_coeff, t0=t0, teacher_forcing=teacher_forcing,delay=self.timescale)
             
             t += dt
             # Log the progress
