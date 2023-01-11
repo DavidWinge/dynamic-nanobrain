@@ -108,7 +108,7 @@ N_dists= len(distances)
 Vt_noise_vals = [0.01, 0.02, 0.05]
 w_noise_vals = [0.025, 0.05, 0.1]
 noise = 0.2
-
+memory_variations = [0.3, 0.5, 0.7, 0.9]
 # Specify the dict of parameters for the Vt_noise test
 
 # First the reference case
@@ -119,6 +119,16 @@ param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dis
 param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
                 'Vt_noise':[Vt_noise]*N_dists,
                 'T_outbound': distances,'T_inbound': distances} for Vt_noise in Vt_noise_vals]
+
+# Now the variation over weight noise
+param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+                'weight_noise':[w_noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for w_noise in w_noise_vals]
+
+# Now the variation in memory constants 
+param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+                'memory_variation':[var]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for var in memory_variations]
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -132,7 +142,16 @@ for param_dict in param_dicts:
     search_dists_l.append(search_dist)
     search_dist_stds.append(search_dist_std)
     
-    
+#%% Generate the plot for memory variation
+
+# The plot versus distance
+mem_var_labels = [0.0] + [value*100 for value in memory_variations]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, mem_var_labels, 
+                                           r'Mem. variation',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list,reformat_legend=True)
+fig.show()
+
 #%% Generate the plots for the selected data set
 
 # The plot versus distance
@@ -149,10 +168,6 @@ fig.show()
 param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
                 'T_outbound': distances,'T_inbound': distances}]
 
-# Now the variation over Vt_noise
-param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
-                'weight_noise':[w_noise]*N_dists,
-                'T_outbound': distances,'T_inbound': distances} for w_noise in w_noise_vals]
 
 min_dists_l = []
 min_dist_stds_l = []
@@ -183,7 +198,7 @@ for param_dict in param_dicts:
     path_straightness_l.append(path_straightness)
     
 #%% Find the mean tortuosity of each trail
-mean_torts = np.zeros((len(noise_vals),len(distances)))
+mean_torts = np.zeros((len(w_noise_vals)+1,len(distances)))
 for k, item in enumerate(path_straightness_l) :
     for l, cum_min_dist in enumerate(item) :
         mean_torts[k,l] = trials.compute_mean_tortuosity(cum_min_dist)
@@ -207,9 +222,10 @@ fig, ax = beeplotter.plot_angular_distances(distances,disc_leaving_angles)
 fig.show()
 
 #%% Calcualte tortuosity as a figure of merit
-k=-1
-tortuosity  = trials.compute_tortuosity(path_straightness[k])
-fig, ax = beeplotter.plot_tortuosity(path_straightness[k])
+k=0
+l = 4
+tortuosity  = trials.compute_tortuosity(path_straightness_l[k][l])
+fig, ax = beeplotter.plot_tortuosity(path_straightness_l[k][l])
 fig.show()
 
 #%%
@@ -257,8 +273,8 @@ out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,500,1000,a=0.0
 
 #%%
 #my_nw = trials.setup_network(memupdate=0.05,memscale=10000.,pon_cpu1_m=0.0) 
-my_nw = trials.setup_network(memupdate=0.75,memscale=160000.,Vt_noise=0.05)
-
+#my_nw = trials.setup_network(memupdate=0.75,memscale=160000.,Vt_noise=0.05)
+my_nw = trials.setup_network(memupdate=0.75,memscale=160000.)
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.1,hupdate=4e-4, noise=0.05)                                                         
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1000,2500,a=0.08,straight_route=True, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3) 
 out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1500,1500,noise=0.2) 

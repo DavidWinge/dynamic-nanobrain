@@ -47,13 +47,15 @@ def evolve(t, layers, dVmax, dtmax) :
             # Save the largest dV we find
             if max_dV_layer > max_dV :
                 max_dV = max_dV_layer
-          
+                
+
     # Choose time-step accordingly
     if max_dV > 0 :
         dt = dVmax/max_dV
     else :
         dt = dtmax
         
+    #dt = min(dtled,dt)
     # Check also against maximum timestep
     dt = min(dt, dtmax)
     

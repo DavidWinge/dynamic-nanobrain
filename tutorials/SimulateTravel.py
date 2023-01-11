@@ -52,18 +52,18 @@ my_nw = trials.setup_network(memupdate=1.0)
 
 # %%
 # Draw a shell-structure
-shell_pos = my_nw.show_network(layout='shell',shell_order=('TB1','Rectifier','CPU4',['CPU1a','CPU1b']),exclude_layers=['CL1','TN2','Pontine'])
+shell_pos = my_nw.show_network(layout='shell',shell_order=('TB1','Rectifier','CPU4',['CPU1a','CPU1b']),exclude_layers=['Bias','CL1','TN2','Pontine'])
 
 # %%
 # Including the Pontine cells
-spring_pos= my_nw.show_network(exclude_layers=['CL1','TN2'],layout='spring',k=20)
+spring_pos= my_nw.show_network(exclude_layers=['CL1','TN2','Bias'],layout='spring',k=20)
 
 # %%
 # Yet another version of a drawing
 #kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2','Pontine'],layout='kamada_kawai')
-kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2'],layout='kamada_kawai',weight=1.0,savefig=True)
+kamada_pos=my_nw.show_network(exclude_layers=['CL1','TN2','Bias'],layout='kamada_kawai',weight=1.0,savefig=True)
 
-#%%
+# %%
 spring_pos= my_nw.show_network(kamada_pos,exclude_layers=['CL1','TN2'],layout='spring',k=20)
 
 

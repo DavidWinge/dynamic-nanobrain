@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.0
+#       jupytext_version: 1.13.8
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -116,7 +116,7 @@ plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=Fals
 # %%
 # Specify two types of devices for the hidden layer
 # 1. Propagator (standard parameters)
-propagator = physics.Device('../parameters/device_parameters.txt')
+propagator = physics.Device('../parameters/device_parameters_1ns_revisedtest.txt')
 propagator.print_parameter('Cstore')
 #propagator.set_parameter('Rstore',1e6)
 # 2. Memory (modify the parameters)

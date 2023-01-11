@@ -42,6 +42,9 @@ class Logger :
                     names.append(node+'-ISD')  
                 for node in node_list :
                     names.append(node+'-Pout')
+                # Add the LED voltage
+                #for node in node_list :
+                #    names.append(node+'-Vled')
              
             elif layers[idx].layer_type == 'output' :
                 # Currents
@@ -86,6 +89,8 @@ class Logger :
                 pout=layers[idx].P*unity_coeff
                 pout=pout.flatten(order='F').tolist()
                 row +=pout
+                #volt=layers[idx].Vled.flatten(order='F').tolist()
+                #row +=volt
                 
             elif layers[idx].layer_type == 'output' :
                 # Voltages

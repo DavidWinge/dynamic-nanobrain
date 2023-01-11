@@ -16,7 +16,7 @@ class EchoStateNetwork :
     
     def __init__(self,N,input_handle=None,bias_handle=None,teacher_handle=None,
                  input_scaling=1.0,bias_scaling=1.0,teacher_scaling=1.0,
-                 spectral_radius=1.0, sparsity=10, timescale=0.5,
+                 spectral_radius=1.0, sparsity=10, timescale=1.0,
                  device=None,silent=False,savefig=False,seed=None) :
         
         self.N = N
@@ -288,8 +288,8 @@ class EchoStateNetwork :
             
     def set_delay(self, delay,nsave=None) :
         # This is the timescale of the system
-        self.timescale=delay
-        self.layers[3].set_teacher_delay(self.timescale,nsave)
+        self.delay=delay
+        self.layers[3].set_teacher_delay(self.delay,nsave)
         
     def evolve(self,T,reset=True,t0=0.,teacher_forcing=False,savestep=1,printstep=50) : 
         

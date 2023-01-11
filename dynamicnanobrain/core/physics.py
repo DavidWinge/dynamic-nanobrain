@@ -33,8 +33,8 @@ class Device:
         # Transistor linear slope in nA/V
         self.linslope=self.p_dict['Cgate']*self.p_dict['vt']*1e9 # nA/V
         self.gammas = self.calc_gammas()
-        self.A = self.calc_A()
-                                 
+        self.A = self.calc_A()        
+        
     def read_parameter_file(self, path_to_file, p_dict, p_units) :
         # Read file and then loop through and assign to dict
         params = np.loadtxt(path_to_file)
@@ -242,3 +242,23 @@ class Device:
                           columns=['Current (uA)','eta, IQE'])
         
         return df
+    
+    def setupLED(self, path_to_LED) :
+
+        VLED, ILED = np.loadtxt(path_to_LED,comments='%',unpack=True)
+  
+        # Interpolate for I(VLED)
+        from scipy.interpolate import interp1d
+        # from uA to nA here:
+        intp_iv_LED = interp1d(VLED,ILED*1e3,kind='cubic',fill_value='extrapolate')
+
+        # Now calculate the diff resistance
+        vspace = np.linspace(0.6,1.9,301) # This part is hard-coded
+        dv = vspace[1]-vspace[0]
+        delta_I = intp_iv_LED(vspace[1:])-intp_iv_LED(vspace[:-1])
+        dI_dV = delta_I/dv
+
+        # Invert and interpolate to get the the differential resistance
+        intp_dR_LED = interp1d(vspace[1:],dI_dV**-1,kind='cubic',fill_value='extrapolate')
+    
+        return intp_dR_LED, intp_iv_LED

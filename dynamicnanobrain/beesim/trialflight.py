@@ -26,7 +26,7 @@ from ..core import plotter
 # In the current case, they become relative to BeeSimulator one folder above
 DATA_PATH= Path('../data/beesim/')
 PLOT_PATH= Path('../plots/beesim/')
-default_device_file = Path('../parameters/device_parameters_1ns.txt')
+default_device_file = Path('../parameters/device_parameters_1ns_revisedtest.txt')
 
 def compute_mean_tortuosity(cum_min_dist):
     """Computed with tau = L / C."""
@@ -231,7 +231,8 @@ def run_trial(trial_nw,Tout=1000,Tinb=1500,
 
 # TODO: Use a memscale option to set the memory
 def setup_network(memscale=1.0, memupdate=0.001, manipulate_shift=True, onset_shift=0.0,
-                  cpu_shift=-0.2,Vt_noise=0.0, device_file=default_device_file, **kwargs) :
+                  cpu_shift=-0.2,Vt_noise=0.0, memory_variation=0.0, 
+                  device_file=default_device_file, **kwargs) :
     
     setup_nw = stone.StoneNetwork(mem_update_h=memupdate,**kwargs) 
     # Setup the internal devices
@@ -262,6 +263,10 @@ def setup_network(memscale=1.0, memupdate=0.001, manipulate_shift=True, onset_sh
     # Feed the devices into the network
     setup_nw.assign_device(devices, unity_key='TB1')
     
+    # Distribution of memory is allowed
+    if memory_variation > 0.0 :
+        setup_nw.randomize_memory(memory_variation)
+        
     # As a final step, noisify the threshold voltages
     if Vt_noise > 0.0 :
         setup_nw.noisify_Vt(Vt_noise) 
@@ -407,7 +412,7 @@ def generate_dataset(T_outbound=1500, T_inbound=1500,N=10,
     except:
 
         # Separate out the network arguments
-        network_args = ['memscale','memupdate','cpu_shift','weight_noise','Vt_noise'] # add more here when needed
+        network_args = ['memscale','memupdate','cpu_shift','weight_noise','Vt_noise','memory_variation'] # add more here when needed
         network_kwargs = {k:v for k,v in kwargs.items() if k in network_args}
 
         # These are the other arguments that go into the run_trial call

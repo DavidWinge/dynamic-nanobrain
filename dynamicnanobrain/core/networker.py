@@ -72,7 +72,7 @@ class Layer :
 class HiddenLayer(Layer) :
     
     def __init__(self, N, output_channel, inhibition_channel, excitation_channel, 
-                 device=None, Vthres=1.2, multiA=False) :
+                 device=None, Vthres=1.2, Vled0=1.3568, multiA=False) :
         """
         Constructor for hidden layers.
     
@@ -111,6 +111,8 @@ class HiddenLayer(Layer) :
         self.dV= np.zeros_like(self.V)
         # I is the current through the LED
         self.I = np.zeros(self.N)
+        self.Vled = np.ones(self.N)*Vled0 # LED voltage, initiate to Vled0
+        #self.V0 = np.ones(self.N)*V0 # driving voltage, initiated here
         # Power is the outputted light, in units of current
         self.P = np.zeros(self.N)
         self.ISD = np.zeros_like(self.I)
@@ -210,9 +212,19 @@ class HiddenLayer(Layer) :
         """ Using a fixed dt, update the voltages."""
         # Get the source drain current from the transistor IV
         self.ISD = self.device.transistorIV(self.V[2],self.Vt_vec)
+        # New part tracking the actual voltage over the LED
+        #dVled = self.device.gammas[-1]*(self.ISD-self.device.LEDIV(self.Vled))
+        #self.Vled += dVled*dt
+        #self.I = self.device.LEDIV(self.Vled)
+        ### Old way of updating the current: 
         self.I += dt*self.device.gammas[-1]*(self.ISD-self.I)
         # Convert current to power through efficiency function
         self.P = self.I*self.device.eta_ABC(self.I)
+        
+        # NEW IMPLEMENTATION
+    def update_VLED(self, dt) :   
+        # Get the source drain current from the transistor IV
+        self.ISD = self.device.transistor2DIV(self.V[2],self.Vsd,self.Vt_vec)
         
     def add_noise(self, noise) :
         self.P += noise
@@ -488,8 +500,12 @@ class OutputLayer(Layer) :
             t_find = max(t-self.teacher_delay,t0) # starts at 0
             # Search for point just before t, start from end of the deque
             idx_t=-1 
-            while t_find < self.teacher_memory[idx_t,0] :
-                idx_t -= 1
+            try :
+                while t_find < self.teacher_memory[idx_t,0] :
+                    idx_t -= 1
+            except IndexError as exc:
+                print('Failed to fetch memory, received IndexError ') 
+                raise RuntimeError from exc
             
             if t_find > t0 :
                 # Catching an exception here when idx_t=-2

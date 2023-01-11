@@ -509,7 +509,8 @@ def plot_weights(weights, colormap='viridis', savefig=False) :
     Ncols = 4 # set max columns to 4
     Nrows = Nplots // Ncols + min(Nplots % Ncols,1)
     
-    ticklabels = {'TL2': range(1, 17),
+    ticklabels = {'Bias': [1], 
+                  'TL2': range(1, 17),
                   'CL1': range(1, 17),
                   'TB1': range(1, 9),
                   'TN2': ['L', 'R'],

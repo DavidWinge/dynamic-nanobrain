@@ -104,6 +104,14 @@ class StoneNetwork :
         # Only noisify the connections (positive values in W). Not the zeros.
         N_nonzero = N * W
         return W + N_nonzero
+    
+    def randomize_memory(self,noise=0.1,dist='uniform',seed=None) :
+        """Introduce a distribution of memory constants in the memory layer"""
+        self.layers['CPU4'].multiA = True
+        if dist=='uniform' :
+            self.layers['CPU4'].generate_uniform_Adist(noise,seed)
+        else :
+            print('Unexpected dist in randomize_memory')
         
     def initialize_nw(self) :
         # Defining layers with custom labels        
@@ -245,7 +253,10 @@ class StoneNetwork :
         return pos
         
     def show_weights(self, **kwargs) :
-        fig, ax = plotter.plot_weights(self.weights, **kwargs)
+        del_bias = self.weights.copy()
+        print(del_bias.keys())
+        del del_bias['Bias->CPU4']
+        fig, ax = plotter.plot_weights(del_bias, **kwargs)
         return fig, ax
         
     def assign_device(self, device_dict, unity_key) :

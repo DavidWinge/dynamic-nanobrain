@@ -1,0 +1,23 @@
+# Device parameters. Here surface recombination velocity has been set to 1e4 cm/s for the LED
+# and 1e5 cm/s for the solar cell. 
+# Resistance parameters (Rinh, Rexc described in A.3, with RC=20 ps, RLED B.1)
+2.0e4 # Rinh, Ohm
+2.0e4 # Rexc, Ohm
+3.0e6 # RLED, Ohm
+1.0e6 	# Rstore, Ohm
+# Capacitance parameters (Cinh, Cexc described in A.3, Cgate fitted in quick_plot.py, CLED B.1 )
+1.25e-15  # Cinh, F
+1.25e-15  # Cexc, F
+0.03e-15  # CLED, F
+0.9e-15 # Cstore, F (summed stray and store capacitances, not gate)
+4.3e-12 # Cgate, F/cm
+# Transistor parameters (described in IV.2, data fitted in quick_plot.py)
+0.153 # Vt (threshold/transition voltage), V
+1.61 # m (exp. coeff. of ideality)
+1790 # I_Vt (current at Vt), nA
+1e7 # vt (sat. vel.), cm/s
+0.2 # Lgate (metal contact length), um
+# LED efficiency (add reference to documentation here)
+2.23246061e+00 # A/B, uA 
+3.31605041e-02 # C/B, 1/uA
+

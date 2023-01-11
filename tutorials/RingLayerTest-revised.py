@@ -111,7 +111,7 @@ plotter.visualize_network(layers, weights, layout='shell', show_edge_labels=Fals
 
 # %%
 # Specify devices for the hidden layer
-propagator = physics.Device('../parameters/device_parameters_1ns.txt')
+propagator = physics.Device('../parameters/device_parameters_1ns_revisedtest.txt')
 layers[1].assign_device(propagator)
 
 # Calculate the unity_coeff to scale the weights accordingly
