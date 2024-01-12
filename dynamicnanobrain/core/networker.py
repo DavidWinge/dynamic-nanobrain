@@ -206,7 +206,7 @@ class HiddenLayer(Layer) :
         """ Using a fixed dt, update the voltages."""
         self.V += dt*self.dV
         # Voltage clipping (third try)
-        self.V = np.clip(self.V,-self.Vthres,self.Vthres)
+        self.V = np.clip(self.V,-self.Vthres,self.Vthres)       
     
     def update_I(self, dt) :
         """ Using a fixed dt, update the voltages."""

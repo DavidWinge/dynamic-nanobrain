@@ -16,7 +16,7 @@ import numpy as np
 import dynamicnanobrain.beesim.trialflight as trials 
 import dynamicnanobrain.beesim.beeplotter as beeplotter
 
-#%%
+#%% Setup the automated test sequence
 def analyse(N, param_dict, radius=20):
     """Iterates through param dictionary, running batches of trials according to the param dictionary"""
     min_dists =[]
@@ -112,22 +112,107 @@ memory_variations = [0.3, 0.5, 0.7, 0.9]
 # Specify the dict of parameters for the Vt_noise test
 
 # First the reference case
-param_dicts = [{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+param_dicts = [{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,  'dVmax':[0.1]*N_dists,
                 'T_outbound': distances,'T_inbound': distances}]
 
 # Now the variation over Vt_noise
-param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
                 'Vt_noise':[Vt_noise]*N_dists,
                 'T_outbound': distances,'T_inbound': distances} for Vt_noise in Vt_noise_vals]
 
+# Now the variation in memory constants 
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
+                'mem_var':[var]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for var in memory_variations]
+
 # Now the variation over weight noise
-param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
-                'weight_noise':[w_noise]*N_dists,
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
+                'w_noise':[w_noise]*N_dists,
                 'T_outbound': distances,'T_inbound': distances} for w_noise in w_noise_vals]
 
+
+min_dists_l = []
+min_dist_stds_l = []
+search_dists_l=[]
+search_dist_stds=[]
+    
+for param_dict in param_dicts:
+    min_dists, min_dist_stds , search_dist, search_dist_std, _ = analyse(N, param_dict)
+    min_dists_l.append(min_dists)
+    min_dist_stds_l.append(min_dist_stds)
+    search_dists_l.append(search_dist)
+    search_dist_stds.append(search_dist_std)
+    
+#%% Now we generate the weight noise plot
+
+# First the reference case
+param_dicts = [{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,  'dVmax':[0.1]*N_dists,
+                'T_outbound': distances,'T_inbound': distances}]
+
+# Now the variation over weight noise
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
+                'w_noise':[w_noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for w_noise in w_noise_vals]
+
+min_dists_l = []
+min_dist_stds_l = []
+search_dists_l=[]
+search_dist_stds=[]
+    
+for param_dict in param_dicts:
+    min_dists, min_dist_stds , search_dist, search_dist_std, _ = analyse(N, param_dict)
+    min_dists_l.append(min_dists)
+    min_dist_stds_l.append(min_dist_stds)
+    search_dists_l.append(search_dist)
+    search_dist_stds.append(search_dist_std)
+    
+# The plot versus distance
+w_noise_labels = [value*100 for value in [0] + w_noise_vals]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, w_noise_labels, 
+                                           'Weight noise',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list, reformat_legend=True, addlabel='(a)')
+fig.show()
+
+#%% Now we generate the Vt noise plot
+
+# First the reference case
+param_dicts = [{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,  'dVmax':[0.1]*N_dists,
+                'T_outbound': distances,'T_inbound': distances}]
+
+# Now the variation over Vt_noise
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
+                'Vt_noise':[Vt_noise]*N_dists,
+                'T_outbound': distances,'T_inbound': distances} for Vt_noise in Vt_noise_vals]
+
+min_dists_l = []
+min_dist_stds_l = []
+search_dists_l=[]
+search_dist_stds=[]
+    
+for param_dict in param_dicts:
+    min_dists, min_dist_stds , search_dist, search_dist_std, _ = analyse(N, param_dict)
+    min_dists_l.append(min_dists)
+    min_dist_stds_l.append(min_dist_stds)
+    search_dists_l.append(search_dist)
+    search_dist_stds.append(search_dist_std)
+
+# The plot versus distance
+Vt_noise_labels = [0.0] + [value*1000 for value in Vt_noise_vals]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, Vt_noise_labels, 
+                                           r'$V_T$ noise (mV)',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list, addlabel='(b)')
+fig.show()
+#%% Now we generate the memory variation plot
+
+# First the reference case
+param_dicts = [{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,  'dVmax':[0.1]*N_dists,
+                'T_outbound': distances,'T_inbound': distances}]
+
 # Now the variation in memory constants 
-param_dicts +=[{'n':N_dists,'memscale':[160000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists,
-                'memory_variation':[var]*N_dists,
+param_dicts +=[{'n':N_dists,'memscale':[100000]*N_dists,'memupdate':[0.75]*N_dists,'noise':[noise]*N_dists, 'dVmax':[0.1]*N_dists,
+                'mem_var':[var]*N_dists,
                 'T_outbound': distances,'T_inbound': distances} for var in memory_variations]
 
 min_dists_l = []
@@ -141,6 +226,14 @@ for param_dict in param_dicts:
     min_dist_stds_l.append(min_dist_stds)
     search_dists_l.append(search_dist)
     search_dist_stds.append(search_dist_std)
+    
+# The plot versus distance
+mem_var_labels = [0.0] + [value*100 for value in memory_variations]
+custom_list = [100,300,1000,3000,6000]
+fig, ax = beeplotter.plot_distance_v_param(min_dists_l, min_dist_stds_l, distances, mem_var_labels, 
+                                           r'Mem. variation',ymax=150,xmin=100,xmax=6000,
+                                           xticks=custom_list,reformat_legend=True,addlabel='(c)')
+fig.show()                        
     
 #%% Generate the plot for memory variation
 
@@ -267,23 +360,25 @@ OUT, INB = trials.generate_dataset(T,T,1)
 # Output is after statistical analysis (mean and std)
 min_dist, min_dist_std, search_dist, search_dist_std = trials.analyze_inbound(INB,T,T)
 
-#%% Or single flight can be generated like this to get the network instance
-my_nw = trials.setup_network(memscale=10.0) 
-out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,500,1000,a=0.07,turn_noise=0.2,straight_route=True,offset=np.pi/4)                                                         
-
 #%%
 #my_nw = trials.setup_network(memupdate=0.05,memscale=10000.,pon_cpu1_m=0.0) 
 #my_nw = trials.setup_network(memupdate=0.75,memscale=160000.,Vt_noise=0.05)
 my_nw = trials.setup_network(memupdate=0.75,memscale=160000.)
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,a=0.1,hupdate=4e-4, noise=0.05)                                                         
 #out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1000,2500,a=0.08,straight_route=True, noise=0.05,hupdate=2e-4, bias_scaling=0.1, mem_init_c=0.3) 
-out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,1500,1500,noise=0.2) 
+out_res, inb_res, out_travel, inb_travel = trials.run_trial(my_nw,3000,3000,noise=0.2) 
 
 #%% Visualize devices and weights
 plt.ion()
 my_nw.show_weights()
-my_nw.show_devices(Vleak_dict={})
-
+import dynamicnanobrain.core.physics as physics
+check_devices = {}
+for k in range(0,3) :
+    check_devices[k]=physics.Device(trials.default_device_file)
+    check_devices[k].set_parameter('Vt',0.1+k*0.1)
+    
+my_nw.show_devices(Vleak_dict={},device_dict=check_devices)
+#my_nw.show_devices(Vleak_dict={})
 #%%
 import pandas as pd
 res = pd.concat([out_res,inb_res],ignore_index=True)
@@ -415,3 +510,7 @@ CPU1_list = CPU1a_list + CPU1b_list
 
 
 plotter.plot_nodes(inb_res, nodes=CPU1_list)
+
+#%% 
+
+plotter.visualize_transistor()

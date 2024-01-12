@@ -622,11 +622,12 @@ ysep = 250
 ax1.plot(tseries_train_1[:],pred_train_1[:,0]+ysep,linewidth=lw_test,color=color_dist_train,label=r'single-$\tau$')
 ax1.plot(tseries_test_1[:],pred_test_1[:,0]+ysep,linewidth=lw_test,color=color_dist_train)
 # ax2 is distributed memory
-ax1.plot(tseries_train_0[:],pred_train_0[:,0],linewidth=lw_test,color=color_single_train,label=r'many-$\tau$')
+ax1.plot(tseries_train_0[:],pred_train_0[:,0],linewidth=lw_test,color=color_single_train,label=r'multi-$\tau$')
 ax1.plot(tseries_test_0[:],pred_test_0[:,0],linewidth=lw_test,color=color_single_train)
 
 # Teacher signal, training + prediction
 teacher_series=signal_handle(tseries_test_0)
+teacher_scale=1
 #ax1.plot(tseries_train_0,signal_handle(tseries_train_0),'--',linewidth=lw_signal,color=color_teacher)
 ax2.plot(tseries_train_0,signal_handle(tseries_train_0),'-',linewidth=lw_signal,color=color_teacher,label='target signal')
 ax2.plot(tseries_test_0,teacher_series,'-',linewidth=lw_signal,color=color_teacher)
@@ -635,30 +636,35 @@ ax2.plot(tseries_test_0,teacher_series,'-',linewidth=lw_signal,color=color_teach
 # Control signal in both plots
 #ax1.plot(tseries_train_0,control_handle(tseries_train_0),'k',linewidth=0.5,label='control input')
 #ax1.plot(tseries_test_0,control_handle(tseries_test_0),'k',linewidth=0.5)
-ax2.plot(tseries_train_0,control_handle(tseries_train_0),'k',linewidth=0.5,label='control input')
-ax2.plot(tseries_test_0,control_handle(tseries_test_0),'k',linewidth=0.5)
+ax2.plot(tseries_train_0,control_handle(tseries_train_0)*teacher_scale,'k',linewidth=0.5,label='control input')
+ax2.plot(tseries_test_0,control_handle(tseries_test_0)*teacher_scale,'k',linewidth=0.5)
  
 vistrain=300
 vispred=1000
 ax2.set_xlabel('Time (ns)')
-ax1.set_ylabel('Output signal (nA)')
-ax2.set_ylabel('Output signal (nA)')
+ax1.set_ylabel('Output signal (nA)',loc='bottom')
+ax1.yaxis.set_label_coords(-0.07,-0.5)
+#ax2.set_ylabel('Output signal (nA)')
 ax1_extray = 30
 ax1_negy = -50
 ax2_extray = ax1_extray
 a=1.2
 ax1_extray += 1.35*ysep
+ax2_yshift = a*ysep/2
 ax1.set_ylim(ax1_negy,teacher_series[:,0].max()+ax1_extray)
 ax1.set_xlim(tseries_test_0[0]-vistrain, tseries_test_0[0]+vispred)
-ax2.set_ylim(0,teacher_series[:,0].max()+ax2_extray)
+#ax2.set_ylim(0,teacher_series[:,0].max()+ax2_extray)
+ax2.set_ylim(ax1_negy-ax2_yshift,teacher_series[:,0].max()+ax1_extray-ax2_yshift)
 ax2.set_xlim(tseries_test_0[0]-vistrain, tseries_test_0[0]+vispred)
 
 ax1.text(2020,teacher_series[:,0].max()+a*ysep,'prediction',fontsize=10,fontstyle='italic')
 ax1.text(1840,teacher_series[:,0].max()+a*ysep,'training',fontsize=10,fontstyle='italic')
 from matplotlib import patches
 # Create a Rectangle patch
-rect1 = patches.Rectangle((tseries_test_0[0]-500, 0), 500, teacher_series[:,0].max()+ax1_extray, linewidth=1, edgecolor='none', facecolor='gray',alpha=0.4)
-rect2 = patches.Rectangle((tseries_test_0[0]-500, 0), 500, teacher_series[:,0].max()+ax2_extray, linewidth=1, edgecolor='none', facecolor='gray',alpha=0.4)
+rect1 = patches.Rectangle((tseries_test_0[0]-500, ax1.get_ylim()[0]), 500, 
+                          ax1.get_ylim()[1]-ax1.get_ylim()[0], linewidth=1, edgecolor='none', facecolor='gray',alpha=0.4)
+rect2 = patches.Rectangle((tseries_test_0[0]-500, ax2.get_ylim()[0]), 500, 
+                          ax2.get_ylim()[1]-ax2.get_ylim()[0], linewidth=1, edgecolor='none', facecolor='gray',alpha=0.4)
 
 # Add the patch to the Axes
 ax1.add_patch(rect1)
@@ -670,7 +676,7 @@ ax2.add_patch(rect2)
 
 # Panel labels
 ax1.text(1640,225+a*ysep,'(a)')
-ax2.text(1640,225,'(b)')
+ax2.text(1640,310,'(b)')
 
 ax1.legend(loc='lower left')
 ax2.legend(loc='lower left')
@@ -908,7 +914,7 @@ stds = np.std(ma_f_err,axis=1)
 
 # Plot the data
 ax.plot(ma_f_err[1].compressed(),'o',label=r'single-$\tau$',color=colors[1])
-ax.plot(ma_f_err[0].compressed(),'^',label=r'many-$\tau$',color=colors[0])
+ax.plot(ma_f_err[0].compressed(),'^',label=r'multi-$\tau$',color=colors[0])
 
 
 # Plot means as lines
@@ -953,7 +959,7 @@ for k in range(0,2) :
 
 tick_list=['0',r'$\Delta f$',r'$2\Delta f$',r'$3\Delta f$',r'$4\Delta f$',r'$5\Delta f$',r'$+6\Delta f$']
 ax.bar(np.arange(0,hits.shape[-1]),summed_hits[1],align='edge',width=-0.3,label=r'single-$\tau$',tick_label=tick_list,color=colors[1])
-ax.bar(np.arange(0,hits.shape[-1]),summed_hits[0],align='edge',width=0.3,label=r'many-$\tau$',tick_label=tick_list,capstyle='round',color=colors[0])
+ax.bar(np.arange(0,hits.shape[-1]),summed_hits[0],align='edge',width=0.3,label=r'multi-$\tau$',tick_label=tick_list,capstyle='round',color=colors[0])
 
 
 ax.set_xlabel('Discrete frequency error')

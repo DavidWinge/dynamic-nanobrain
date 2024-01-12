@@ -112,12 +112,12 @@ plotter.visualize_network(layers, weights, layout='shell',
 # %%
 # Specify two types of devices for the hidden layer
 # 1. Propagator (standard parameters)
-propagator = physics.Device('../parameters/device_parameters.txt')
-
+propagator = physics.Device('../parameters/device_parameters_1ns_revisedtest.txt')
+propagator.set_parameter('Rstore',3e6) # Ohms, original value is 2e6 Ohms
 propagator.print_parameter('Rstore')
 # 2. Memory (modify the parameters)
-memory = physics.Device('../parameters/device_parameters.txt')
-memory.set_parameter('Rstore',2e7) # Ohms, original value is 2e6 Ohms
+memory = physics.Device('../parameters/device_parameters_1ns_revisedtest.txt')
+memory.set_parameter('Rstore',1e7) # Ohms, original value is 2e6 Ohms
 memory.print_parameter('Rstore')
 
 # Specify the internal dynamics by supplying the RC constants to the hidden layer (six parameters)
@@ -139,10 +139,10 @@ print(f'Imax is found to be {Imax} nA')
 # %%
 # Specify an exciting current pulse train of squares
 # Pulse train of 2 ns pulses
-t_blue = [(6.0,8.0),(11.0,13.0),(16.0,18.0)]#, (255.0,455.0)] # 
+t_blue = [(6.0,6.5),(10.0,11.5),(12.0,13.5),(14.0,15.5)]#, (255.0,455.0)] # 
 
 # Use the square pulse function and specify which node in the input layer gets which pulse
-layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 1.0*Imax))
+layers[0].set_input_vector_func(func_handle=physics.square_pulse, func_args=(t_blue, 0.4*Imax))
 
 # %% [markdown]
 # ### 6. Evolve in time

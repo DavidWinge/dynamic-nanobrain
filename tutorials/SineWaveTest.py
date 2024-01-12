@@ -131,7 +131,7 @@ memory.print_parameter('Cstore')
 layers[1].assign_device(propagator)
 layers[2].assign_device(memory)
 # Tweak the threshold voltage
-Vthres=0.5
+#Vthres=0.5
 layers[1].Vthres=Vthres
 layers[2].Vthres=Vthres
 

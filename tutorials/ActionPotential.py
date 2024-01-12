@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.0
+#       jupytext_version: 1.13.8
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -34,6 +34,7 @@ import dynamicnanobrain.core.networker as nw
 import dynamicnanobrain.core.timemarching as tm
 import dynamicnanobrain.core.plotter as plotter
 import dynamicnanobrain.core.physics as physics
+import dynamicnanobrain.core.logger as logger
 
 plt.rcParams['figure.dpi'] = 100 # 200 e.g. is really fine, but slower
 

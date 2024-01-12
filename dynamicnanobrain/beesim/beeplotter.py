@@ -167,7 +167,7 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
                           param_name,ylabel='Distance (steps)',
                           ax=None, label_font_size=11, unit_font_size=10,
                           title=None, xmin=10,xmax=10000, ymax=300,xticks=None,
-                          reformat_legend=False):
+                          reformat_legend=False,addlabel=None):
     fig = None
     if ax is None:
         fig, ax = plt.subplots(figsize=(nature_single, nature_single))
@@ -205,6 +205,8 @@ def plot_distance_v_param(min_dists, min_dist_stds, distances, param_vals,
     # Reformat labels here
     if reformat_legend :
         labels = [f'{val:.0f}%' for val in param_vals]
+    if addlabel is not None :
+        ax.text(60,ymax-3,addlabel)
     
     l = ax.legend(handles,
                   labels,

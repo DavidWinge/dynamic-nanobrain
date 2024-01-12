@@ -72,7 +72,19 @@ class Device:
 
         if Vt_vec is None :
             Vt = self.p_dict['Vt'] 
+            #return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub_0, self.Id_sat_0],Vt) 
+        return np.heaviside(Vg-Vt,0.5)*self.Id_sat_0(Vg,Vt)+np.heaviside(Vt-Vg,0.5)*self.Id_sub_0(Vg,Vt)
+        #else :
+        #    Vt = Vt_vec
+        #    # This should work even when Vt is an array
+        #    return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub, self.Id_sat],Vt,Vg<Vt)   
+    
+    def transistorIVold(self,Vg,Vt_vec=None) :
+        
+        if Vt_vec is None :
+            Vt = self.p_dict['Vt'] 
             return np.piecewise(Vg, [Vg<Vt, Vg>=Vt], [self.Id_sub_0, self.Id_sat_0],Vt) 
+            #return np.heaviside(Vg-Vt,0.5)*self.Id_sat_0(Vg,Vt)+np.heaviside(Vt-Vg,0.5)*self.Id_sub_0(Vg,Vt)
         else :
             Vt = Vt_vec
             # This should work even when Vt is an array

@@ -266,10 +266,13 @@ class StoneNetwork :
         unity_device = device_dict[unity_key]
         self.unity_coeff, self.Imax = unity_device.inverse_gain_coefficient(unity_device.eta_ABC, self.layers[unity_key].Vthres)
 
-    def show_devices(self, Vleak_dict, **kwargs) :
-        # Send the class own device dict
-        plotter.plot_devices(self.devices, Vleak_dict, **kwargs)
-        
+    def show_devices(self, Vleak_dict, device_dict=None, **kwargs) :
+        if device_dict is None :
+            # Send the class own device dict
+            plotter.plot_devices(self.devices, Vleak_dict, **kwargs)
+        else :
+            plotter.plot_devices(device_dict, Vleak_dict, **kwargs)
+    
     def assign_memory(self, key, device) :
         self.layers[key].assign_device(device)
         self.mem_coeff, self.mem_Imax = device.inverse_gain_coefficient(device.eta_ABC, self.layers[key].Vthres)
